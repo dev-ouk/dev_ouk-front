@@ -16,6 +16,7 @@ export default function Navigation() {
     { name: 'Home', href: '/' },
     { name: 'Projects', href: '/projects' },
     { name: 'Tech Blog', href: '/tech-blog' },
+    { name: 'Exercise', href: '/exercise' },
     { name: 'Coding Test', href: '/coding-test' },
     { name: 'Portfolio', href: '/portfolio' },
     { name: 'Contact', href: '/contact' },

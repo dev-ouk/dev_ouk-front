@@ -211,19 +211,95 @@ export default function Home() {
             </div>
           </div>
           
-          <div className="text-center">
-            <Link 
-              href="/projects" 
-              className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              전체 포트폴리오 보기
-              <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-        </div>
-      </section>
+              <div className="text-center">
+                <Link 
+                  href="/projects" 
+                  className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  전체 포트폴리오 보기
+                  <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* 운동 하이라이트 Section */}
+          <section className="py-20 bg-white dark:bg-gray-800">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="text-center mb-16">
+                <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">운동 라이프스타일</h2>
+                <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+                  건강한 몸과 마음을 위한 규칙적인 운동과 기록 관리
+                </p>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-8 mb-12">
+                {/* 운동 카테고리 */}
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-8">
+                  <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">운동 카테고리</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { name: 'Push', color: 'bg-red-500', exercises: ['푸시업', '딥스', '벤치프레스'] },
+                      { name: 'Pull', color: 'bg-blue-500', exercises: ['풀업', '로우', '렛풀다운'] },
+                      { name: 'Core', color: 'bg-green-500', exercises: ['플랭크', '크런치', '러시안 트위스트'] },
+                      { name: 'Legs', color: 'bg-purple-500', exercises: ['스쿼트', '런지', '데드리프트'] }
+                    ].map((category) => (
+                      <div key={category.name} className="text-center">
+                        <div className={`w-12 h-12 ${category.color} rounded-lg mx-auto mb-2 flex items-center justify-center`}>
+                          <span className="text-white font-bold text-sm">{category.name[0]}</span>
+                        </div>
+                        <h4 className="font-semibold text-gray-900 dark:text-white mb-2">{category.name}</h4>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
+                          {category.exercises.slice(0, 2).join(', ')}
+                          {category.exercises.length > 2 && '...'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 최근 운동 기록 */}
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-8">
+                  <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">최근 운동 기록</h3>
+                  <div className="space-y-4">
+                    {[
+                      { exercise: '푸시업', category: 'Push', reps: '30×3', date: '1월 15일' },
+                      { exercise: '풀업', category: 'Pull', reps: '10×3', date: '1월 14일' },
+                      { exercise: '플랭크', category: 'Core', reps: '60초×3', date: '1월 13일' },
+                      { exercise: '스쿼트', category: 'Legs', reps: '20×4', date: '1월 12일' }
+                    ].map((record, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded-lg">
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-white">{record.exercise}</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{record.reps}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="inline-block px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
+                            {record.category}
+                          </span>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{record.date}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <Link 
+                  href="/exercise" 
+                  className="inline-flex items-center px-8 py-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  <svg className="mr-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  운동 기록 보기
+                </Link>
+              </div>
+            </div>
+          </section>
 
       {/* 연락처 & 이력서 CTA Section */}
       <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600">
