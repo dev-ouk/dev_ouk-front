@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
+import LoginButton from './LoginButton'
 
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -43,6 +44,7 @@ export default function Navigation() {
                 {item.name}
               </Link>
             ))}
+            <LoginButton />
           </div>
 
           {/* 모바일 메뉴 버튼 */}
@@ -78,6 +80,9 @@ export default function Navigation() {
                   {item.name}
                 </Link>
               ))}
+              <div className="px-3 py-2">
+                <LoginButton />
+              </div>
             </div>
           </div>
         )}
