@@ -4,6 +4,7 @@ import { useState } from 'react'
 import CategoryTabs from '@/components/CategoryTabs'
 import ExerciseList from '@/components/ExerciseList'
 import CalendarSummary from '@/components/CalendarSummary'
+import ExerciseStats from '@/components/ExerciseStats'
 
 export default function Exercise() {
   const [selectedCategory, setSelectedCategory] = useState('Push')
@@ -86,8 +87,11 @@ export default function Exercise() {
             </div>
           </div>
 
-          {/* 오른쪽: 캘린더 및 최근 기록 */}
-          <CalendarSummary exerciseRecords={exerciseRecords} />
+          {/* 오른쪽: 캘린더 및 통계 */}
+          <div className="space-y-6">
+            <CalendarSummary exerciseRecords={exerciseRecords} />
+            <ExerciseStats exerciseRecords={exerciseRecords} />
+          </div>
         </div>
       </div>
     </div>
