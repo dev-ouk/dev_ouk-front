@@ -208,7 +208,7 @@ export default function Portfolio() {
               </div>
               <div>
                 <p className="font-medium text-gray-900 dark:text-white">이메일</p>
-                <p className="text-gray-600 dark:text-gray-300">contact@dev-ouk.com</p>
+                <p className="text-gray-600 dark:text-gray-300">kimsangouk1020@gmail.com</p>
               </div>
             </div>
             
@@ -220,7 +220,7 @@ export default function Portfolio() {
               </div>
               <div>
                 <p className="font-medium text-gray-900 dark:text-white">GitHub</p>
-                <p className="text-gray-600 dark:text-gray-300">github.com/dev-ouk</p>
+                <p className="text-gray-600 dark:text-gray-300">github.com/KimSangOuk</p>
               </div>
             </div>
           </div>

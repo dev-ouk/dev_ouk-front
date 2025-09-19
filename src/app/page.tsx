@@ -52,7 +52,7 @@ export default function Home() {
             {/* 현재 포지션 & 핵심 키워드 */}
             <div className="relative">
               <p className="text-2xl md:text-3xl text-white mb-6 max-w-4xl mx-auto leading-relaxed font-light">
-                <span className="inline-block animate-fade-in-up delay-700 text-cyan-200">Frontend Developer</span>{' '}
+                <span className="inline-block animate-fade-in-up delay-700 text-cyan-200">Backend Developer</span>{' '}
                 <span className="inline-block animate-fade-in-up delay-900 text-purple-200">지망생</span>
               </p>
               <p className="text-lg md:text-xl text-gray-200 mb-8 max-w-3xl mx-auto font-light leading-relaxed">

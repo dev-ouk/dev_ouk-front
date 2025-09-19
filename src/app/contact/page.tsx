@@ -54,7 +54,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-1">이메일</h3>
-                    <p className="text-gray-600 dark:text-gray-300">contact@dev-ouk.com</p>
+                    <p className="text-gray-600 dark:text-gray-300">kimsangouk1020@gmail.com</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">보통 24시간 내에 답변드립니다</p>
                   </div>
                 </div>
@@ -67,7 +67,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-1">GitHub</h3>
-                    <p className="text-gray-600 dark:text-gray-300">github.com/dev-ouk</p>
+                    <p className="text-gray-600 dark:text-gray-300">github.com/KimSangOuk</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">프로젝트 소스코드를 확인해보세요</p>
                   </div>
                 </div>
