@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import CategoryTabs from '@/components/CategoryTabs'
 import ExerciseList from '@/components/ExerciseList'
+import ExerciseListWithFilter from '@/components/ExerciseListWithFilter'
 import CalendarSummary from '@/components/CalendarSummary'
 import ExerciseStats from '@/components/ExerciseStats'
 
@@ -13,6 +14,7 @@ export default function Exercise() {
       id: 1,
       exercise: '푸시업',
       category: 'Push',
+      difficulty: '초급',
       reps: 30,
       sets: 3,
       date: new Date('2024-01-15'),
@@ -22,6 +24,7 @@ export default function Exercise() {
       id: 2,
       exercise: '풀업',
       category: 'Pull',
+      difficulty: '중급',
       reps: 10,
       sets: 3,
       date: new Date('2024-01-14'),
@@ -31,6 +34,7 @@ export default function Exercise() {
       id: 3,
       exercise: '플랭크',
       category: 'Core',
+      difficulty: '초급',
       reps: 1,
       sets: 3,
       date: new Date('2024-01-13'),
@@ -40,10 +44,51 @@ export default function Exercise() {
       id: 4,
       exercise: '스쿼트',
       category: 'Legs',
+      difficulty: '초급',
       reps: 20,
       sets: 4,
       date: new Date('2024-01-12'),
       notes: '깊게 내려가기'
+    },
+    {
+      id: 5,
+      exercise: '벤치프레스',
+      category: 'Push',
+      difficulty: '중급',
+      reps: 8,
+      sets: 4,
+      date: new Date('2024-01-11'),
+      notes: '무게 증가'
+    },
+    {
+      id: 6,
+      exercise: '데드리프트',
+      category: 'Legs',
+      difficulty: '고급',
+      reps: 5,
+      sets: 3,
+      date: new Date('2024-01-10'),
+      notes: '기술 중점'
+    },
+    {
+      id: 7,
+      exercise: '머슬업',
+      category: 'Pull',
+      difficulty: '고급',
+      reps: 5,
+      sets: 3,
+      date: new Date('2024-01-09'),
+      notes: '동작 연습'
+    },
+    {
+      id: 8,
+      exercise: 'L-싯',
+      category: 'Core',
+      difficulty: '고급',
+      reps: 10,
+      sets: 3,
+      date: new Date('2024-01-08'),
+      notes: '균형 유지'
     }
   ])
 
@@ -70,10 +115,10 @@ export default function Exercise() {
               onCategoryChange={setSelectedCategory}
             />
 
-            {/* 선택된 카테고리의 운동 리스트 */}
-            <ExerciseList
-              exercises={exerciseRecords}
-              selectedCategory={selectedCategory}
+            {/* 검색/필터가 포함된 운동 리스트 */}
+            <ExerciseListWithFilter
+              exerciseRecords={exerciseRecords}
+              categories={exerciseCategories}
             />
 
             {/* 새 운동 기록 추가 버튼 */}
