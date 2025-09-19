@@ -26,6 +26,27 @@ export default function Portfolio() {
     }
   ]
 
+  const timeline = [
+    {
+      year: "2024",
+      title: "프론트엔드 개발자 지망생",
+      description: "지속적인 학습과 프로젝트를 통한 성장",
+      type: "현재"
+    },
+    {
+      year: "2023",
+      title: "웹 개발 학습 시작",
+      description: "HTML, CSS, JavaScript 기초부터 React, Next.js까지 학습",
+      type: "학습"
+    },
+    {
+      year: "2022",
+      title: "프로그래밍 입문",
+      description: "Python을 통한 프로그래밍 기초 학습",
+      type: "입문"
+    }
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-16">
       <div className="max-w-4xl mx-auto px-4 py-16">
@@ -34,6 +55,67 @@ export default function Portfolio() {
           <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
             프론트엔드 개발자로서의 경험과 기술을 한눈에 볼 수 있습니다
           </p>
+        </div>
+
+        {/* 자기소개 섹션 */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 mb-8">
+          <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-6">자기소개</h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">안녕하세요!</h3>
+              <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-4">
+                <strong className="text-gray-900 dark:text-white">Frontend Developer 지망생</strong>으로서, 
+                사용자 경험을 최우선으로 생각하며 지속적으로 성장하고 있습니다.
+              </p>
+              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
+                새로운 기술을 배우고 적용하는 것을 즐기며, 
+                문제 해결 과정에서의 학습과 성장을 중요하게 생각합니다.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">가치관</h3>
+              <ul className="space-y-3 text-gray-600 dark:text-gray-300">
+                <li className="flex items-start space-x-2">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></span>
+                  <span>사용자 중심의 개발을 지향합니다</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></span>
+                  <span>지속적인 학습과 성장을 추구합니다</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0"></span>
+                  <span>협업과 소통을 중시합니다</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="w-2 h-2 bg-yellow-500 rounded-full mt-2 flex-shrink-0"></span>
+                  <span>문제 해결 과정을 즐깁니다</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* 타임라인 섹션 */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 mb-8">
+          <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-6">성장 타임라인</h2>
+          <div className="space-y-6">
+            {timeline.map((item, index) => (
+              <div key={index} className="flex items-start space-x-4">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                  item.type === '현재' ? 'bg-blue-500' :
+                  item.type === '학습' ? 'bg-green-500' :
+                  'bg-gray-500'
+                }`}>
+                  {item.year}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{item.title}</h3>
+                  <p className="text-gray-600 dark:text-gray-300">{item.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* 다운로드 버튼 */}

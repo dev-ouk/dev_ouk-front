@@ -127,7 +127,7 @@ export default function Home() {
           
           <div className="flex justify-center">
             <Link 
-              href="/about" 
+              href="/portfolio" 
               className="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
             >
               더 자세히 알아보기
