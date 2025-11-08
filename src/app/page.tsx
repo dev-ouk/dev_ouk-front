@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronLeft, ChevronRight, Code2, Menu } from "lucide-react";
 
 const navItems = [
   {
     id: "coding-test",
     label: "Coding Test",
-    abbreviation: "CT",
+    icon: Code2,
   },
 ];
 
@@ -21,8 +22,8 @@ export default function Home() {
         }`}
       >
         <div className="flex items-center gap-3 px-4 py-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white">
-            CT
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-white">
+            <Menu className="h-5 w-5" aria-hidden="true" />
           </div>
           <span
             className={`text-lg font-semibold transition-opacity duration-200 ${
@@ -41,8 +42,8 @@ export default function Home() {
                   type="button"
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-600">
-                    {item.abbreviation}
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-600">
+                    <item.icon className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <span
                     className={`transition-opacity duration-200 ${
@@ -64,35 +65,9 @@ export default function Home() {
           className="absolute -right-4 top-24 flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm transition hover:bg-zinc-100"
         >
           {isOpen ? (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth="1.5"
-              stroke="currentColor"
-              className="h-5 w-5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15.75 19.5L8.25 12l7.5-7.5"
-              />
-            </svg>
+            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
           ) : (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth="1.5"
-              stroke="currentColor"
-              className="h-5 w-5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8.25 4.5l7.5 7.5-7.5 7.5"
-              />
-            </svg>
+            <ChevronRight className="h-5 w-5" aria-hidden="true" />
           )}
         </button>
       </aside>
