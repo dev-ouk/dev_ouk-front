@@ -243,6 +243,14 @@ export default function CodingTestPage() {
           </code>{" "}
           응답을 기반으로 최근 코딩 테스트 풀이 내역을 보여줍니다.
         </p>
+        <div className="mt-6">
+          <button
+            type="button"
+            className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
+          >
+            문제 풀이 기록 추가하기
+          </button>
+        </div>
       </header>
 
       <section className="mt-10">{content}</section>
