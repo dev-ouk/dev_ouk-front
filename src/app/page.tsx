@@ -17,37 +17,43 @@ export default function Home() {
   return (
     <div className="flex min-h-screen bg-zinc-50 font-sans text-zinc-900">
       <aside
-        className={`relative flex flex-col border-r border-zinc-200 bg-white transition-all duration-300 ease-in-out ${
+        className={`relative flex flex-shrink-0 flex-col border-r border-zinc-200 bg-white transition-all duration-300 ease-in-out ${
           isOpen ? "w-64" : "w-20"
         }`}
       >
-        <div className="flex items-center gap-3 px-4 py-6">
+        <div className="flex h-20 items-center gap-3 px-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-white">
             <Menu className="h-5 w-5" aria-hidden="true" />
           </div>
           <span
-            className={`text-lg font-semibold transition-opacity duration-200 ${
-              isOpen ? "opacity-100" : "pointer-events-none opacity-0"
+            className={`overflow-hidden text-lg font-semibold transition-[max-width,opacity] duration-200 ${
+              isOpen
+                ? "max-w-[140px] opacity-100"
+                : "pointer-events-none max-w-0 opacity-0"
             }`}
           >
             메뉴
           </span>
         </div>
 
-        <nav className="flex-1 px-2">
+        <nav className="flex-1 px-2 py-2">
           <ul className="space-y-2">
             {navItems.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100"
+                  className={`group relative flex w-full items-center justify-center rounded-xl px-3 py-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 ${
+                    isOpen ? "justify-start gap-3" : ""
+                  }`}
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-600">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 transition-all group-hover:bg-zinc-200">
                     <item.icon className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <span
-                    className={`transition-opacity duration-200 ${
-                      isOpen ? "opacity-100" : "pointer-events-none opacity-0"
+                    className={`overflow-hidden whitespace-nowrap text-sm transition-[margin,max-width,opacity] duration-200 ${
+                      isOpen
+                        ? "ml-2 max-w-[150px] opacity-100"
+                        : "pointer-events-none ml-0 max-w-0 opacity-0"
                     }`}
                   >
                     {item.label}
@@ -62,7 +68,7 @@ export default function Home() {
           type="button"
           aria-label={isOpen ? "사이드 메뉴 닫기" : "사이드 메뉴 열기"}
           onClick={() => setIsOpen((prev) => !prev)}
-          className="absolute -right-4 top-24 flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm transition hover:bg-zinc-100"
+          className="absolute -right-4 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm transition hover:bg-zinc-100"
         >
           {isOpen ? (
             <ChevronLeft className="h-5 w-5" aria-hidden="true" />
