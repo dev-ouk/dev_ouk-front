@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Loader2,
+  Search,
+  X,
   XCircle,
 } from "lucide-react";
 import { SidebarLayout } from "../_components/sidebar-layout";
@@ -150,6 +152,7 @@ export default function CodingTestPage() {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -246,6 +249,7 @@ export default function CodingTestPage() {
         <div className="mt-6">
           <button
             type="button"
+            onClick={() => setIsModalOpen(true)}
             className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
           >
             문제 풀이 기록 추가하기
@@ -254,6 +258,10 @@ export default function CodingTestPage() {
       </header>
 
       <section className="mt-10">{content}</section>
+
+      {isModalOpen ? (
+        <AddProblemModal onClose={() => setIsModalOpen(false)} />
+      ) : null}
     </SidebarLayout>
   );
 }
@@ -391,6 +399,109 @@ function StatusCell({ verdict }: { verdict?: string | null }) {
       <Icon className="h-4 w-4" aria-hidden="true" />
       {label}
     </span>
+  );
+}
+
+function AddProblemModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl"
+      >
+        <header className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Coding Test
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold text-zinc-900">
+              문제 풀이 기록 추가
+            </h2>
+            <p className="mt-2 text-sm text-zinc-600">
+              사이트와 문제를 검색하여 기록을 추가할 수 있습니다. 지금은 UI만 준비되어 있어요.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="모달 닫기"
+            className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="grid gap-6 px-6 py-6 lg:grid-cols-[2fr,1fr]">
+          <div className="space-y-5">
+            <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                사이트 선택
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {["백준", "프로그래머스", "기타"].map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+              <label className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500 focus-within:border-zinc-300 focus-within:bg-white focus-within:text-zinc-700">
+                <Search className="h-4 w-4" aria-hidden="true" />
+                <input
+                  type="search"
+                  placeholder="문제 번호 또는 이름으로 검색하세요"
+                  className="w-full border-none bg-transparent text-sm text-zinc-700 outline-none"
+                  disabled
+                />
+              </label>
+
+              <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center text-sm text-zinc-500">
+                검색 결과는 이 영역에 표시됩니다. API 연동 전이라 아직 비어 있습니다.
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              선택한 문제
+            </span>
+            <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-5 text-sm text-zinc-500">
+              아직 선택된 문제가 없습니다. 검색 결과에서 문제를 선택하면 상세 정보가 여기에 표시됩니다.
+            </div>
+
+            <button
+              type="button"
+              className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+              disabled
+            >
+              선택한 문제 추가
+            </button>
+
+            <button
+              type="button"
+              className="w-full rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-500 transition hover:border-zinc-400 hover:text-zinc-700"
+            >
+              해당 문제 직접 추가
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
