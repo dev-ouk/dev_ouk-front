@@ -153,6 +153,7 @@ export default function CodingTestPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -260,7 +261,16 @@ export default function CodingTestPage() {
       <section className="mt-10">{content}</section>
 
       {isModalOpen ? (
-        <AddProblemModal onClose={() => setIsModalOpen(false)} />
+        <AddProblemModal
+          onClose={() => {
+            setIsModalOpen(false);
+            setIsDirectModalOpen(false);
+          }}
+          onOpenDirectModal={() => setIsDirectModalOpen(true)}
+        />
+      ) : null}
+      {isDirectModalOpen ? (
+        <DirectAddModal onClose={() => setIsDirectModalOpen(false)} />
       ) : null}
     </SidebarLayout>
   );
@@ -402,7 +412,13 @@ function StatusCell({ verdict }: { verdict?: string | null }) {
   );
 }
 
-function AddProblemModal({ onClose }: { onClose: () => void }) {
+function AddProblemModal({
+  onClose,
+  onOpenDirectModal,
+}: {
+  onClose: () => void;
+  onOpenDirectModal: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
       <div
@@ -486,6 +502,10 @@ function AddProblemModal({ onClose }: { onClose: () => void }) {
 
             <button
               type="button"
+              onClick={() => {
+                onClose();
+                onOpenDirectModal();
+              }}
               className="w-full rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-500 transition hover:border-zinc-400 hover:text-zinc-700"
             >
               해당 문제 직접 추가
@@ -501,6 +521,144 @@ function AddProblemModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DirectAddModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+      >
+        <header className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Coding Test
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold text-zinc-900">
+              문제 직접 추가
+            </h2>
+            <p className="mt-2 text-sm text-zinc-600">
+              검색에 없는 문제를 직접 입력해 새로운 풀이 기록을 생성할 수 있습니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="모달 닫기"
+            className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="space-y-5 px-6 py-6">
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              사이트 선택
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {["백준", "프로그래머스", "기타"].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="사이트 문제 ID">
+              <input
+                type="text"
+                placeholder="예: 1000"
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300"
+                disabled
+              />
+            </Field>
+            <Field label="문제명">
+              <input
+                type="text"
+                placeholder="예: A+B"
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300"
+                disabled
+              />
+            </Field>
+          </div>
+
+          <Field label="문제 링크">
+            <input
+              type="url"
+              placeholder="https://..."
+              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300"
+              disabled
+            />
+          </Field>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="백준 티어 선택">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
+                선택 버튼은 추후 연동 예정입니다.
+              </div>
+            </Field>
+            <Field label="백준 난이도 선택">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
+                선택 버튼은 추후 연동 예정입니다.
+              </div>
+            </Field>
+            <Field label="프로그래머스 Level 선택">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
+                Level 선택 UI는 추후 추가됩니다.
+              </div>
+            </Field>
+          </div>
+
+          <Field label="알고리즘 태그 선택">
+            <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
+              API 연동 시 태그 선택 컴포넌트가 이 자리에 표시될 예정입니다.
+            </div>
+          </Field>
+        </div>
+
+        <footer className="flex justify-end gap-3 border-t border-zinc-200 px-6 py-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
+          >
+            문제 추가 완료
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        {label}
+      </label>
+      {children}
     </div>
   );
 }
