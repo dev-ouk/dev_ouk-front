@@ -776,7 +776,7 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
 
     if (detectedSite === "BAEKJOON") {
       return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center">
           <Image
             src={`https://static.solved.ac/tier_large/${previewDifficulty}.svg`}
             alt="백준 난이도"
@@ -785,9 +785,6 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
             className="h-12 w-12"
             unoptimized
           />
-          <span className="text-sm font-semibold text-zinc-800">
-            Tier #{previewDifficulty}
-          </span>
         </div>
       );
     }
