@@ -34,6 +34,19 @@ type TaxonomyTerm = {
   name: string;
 };
 
+type ProblemPreview = {
+  site?: string | null;
+  siteProblemId?: string | number | null;
+  title?: string | null;
+  url?: string | null;
+  difficulty?: number | null;
+  taxonomies?: {
+    algo?: {
+      suggestedTermSlugs?: string[];
+    };
+  } | null;
+};
+
 const SITE_META: Record<string, SiteMeta> = {
   BAEKJOON: {
     name: "백준",
@@ -46,10 +59,10 @@ const SITE_META: Record<string, SiteMeta> = {
 };
 
 const PROGRAMMERS_LEVEL_COLORS: Record<number, string> = {
-  0: "#21a1ff",
+  0: "#2189ff",
   1: "#1bbaff",
   2: "#47c84c",
-  3: "#ffa800",
+  3: "#ffa85a",
   4: "#ff6b18",
   5: "#c658e1",
 };
@@ -536,6 +549,14 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
   const [selectedTerms, setSelectedTerms] = useState<string[]>([]);
   const [isLoadingTerms, setIsLoadingTerms] = useState(true);
   const [termsError, setTermsError] = useState<string | null>(null);
+  const [problemLink, setProblemLink] = useState("");
+  const [detectedSite, setDetectedSite] = useState<"BAEKJOON" | "PROGRAMMERS" | null>(null);
+  const [detectedProblemId, setDetectedProblemId] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState("");
+  const [previewDifficulty, setPreviewDifficulty] = useState<number | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -601,6 +622,187 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
     );
   };
 
+  useEffect(() => {
+    if (!problemLink.trim()) {
+      setDetectedSite(null);
+      setDetectedProblemId("");
+      setLinkError(null);
+      return;
+    }
+
+    try {
+      const url = new URL(problemLink.trim());
+      const hostname = url.hostname.toLowerCase();
+      const pathname = url.pathname.toLowerCase();
+
+      if (hostname.includes("acmicpc.net")) {
+        const match = pathname.match(/\/problem\/(\d+)/);
+        if (match) {
+          setDetectedSite("BAEKJOON");
+          setDetectedProblemId(match[1]);
+          setLinkError(null);
+          return;
+        }
+        setDetectedSite(null);
+        setDetectedProblemId("");
+        setLinkError("백준 링크 형식을 인식하지 못했습니다.");
+        return;
+      }
+
+      if (hostname.includes("programmers.co.kr")) {
+        const match = pathname.match(/\/lessons\/(\d+)/);
+        if (match) {
+          setDetectedSite("PROGRAMMERS");
+          setDetectedProblemId(match[1]);
+          setLinkError(null);
+          return;
+        }
+        setDetectedSite(null);
+        setDetectedProblemId("");
+        setLinkError("프로그래머스 링크 형식을 인식하지 못했습니다.");
+        return;
+      }
+
+      setDetectedSite(null);
+      setDetectedProblemId("");
+      setLinkError("지원하지 않는 문제 사이트입니다.");
+    } catch (urlError) {
+      setDetectedSite(null);
+      setDetectedProblemId("");
+      setLinkError("올바른 URL을 입력해 주세요.");
+    }
+  }, [problemLink]);
+
+  useEffect(() => {
+    if (!problemLink.trim() || linkError || !detectedSite) {
+      setPreviewLoading(false);
+      setPreviewError(null);
+      setPreviewTitle("");
+      setPreviewDifficulty(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchPreview = async () => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!baseUrl) {
+        setPreviewError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+        setPreviewLoading(false);
+        setPreviewTitle("");
+        setPreviewDifficulty(null);
+        return;
+      }
+
+      try {
+        setPreviewLoading(true);
+        setPreviewError(null);
+
+        const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        const response = await fetch(`${normalizedBaseUrl}/api/v1/problem-previews`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: problemLink.trim() }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `문제 정보를 불러올 수 없습니다. (status: ${response.status})`,
+          );
+        }
+
+        const payload = (await response.json()) as ProblemPreview;
+        const normalizedSite = payload.site?.toUpperCase() as
+          | "BAEKJOON"
+          | "PROGRAMMERS"
+          | undefined;
+
+        if (normalizedSite === "BAEKJOON" || normalizedSite === "PROGRAMMERS") {
+          setDetectedSite(normalizedSite);
+        }
+
+        if (payload.siteProblemId) {
+          setDetectedProblemId(String(payload.siteProblemId));
+        }
+
+        setPreviewTitle(payload.title ?? "");
+        setPreviewDifficulty(
+          typeof payload.difficulty === "number" ? payload.difficulty : null,
+        );
+
+        const suggestedSlugs =
+          payload.taxonomies?.algo?.suggestedTermSlugs ?? [];
+        setSelectedTerms(suggestedSlugs);
+      } catch (fetchError) {
+        if ((fetchError as Error).name === "AbortError") {
+          return;
+        }
+        setPreviewError((fetchError as Error).message);
+        setPreviewTitle("");
+        setPreviewDifficulty(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    };
+
+    fetchPreview();
+
+    return () => {
+      controller.abort();
+    };
+  }, [problemLink, detectedSite, linkError]);
+
+  const renderDifficultyContent = () => {
+    if (previewLoading) {
+      return (
+        <div className="flex items-center gap-2 text-zinc-500">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          정보를 불러오는 중입니다...
+        </div>
+      );
+    }
+
+    if (previewError) {
+      return <p className="text-sm text-rose-500">{previewError}</p>;
+    }
+
+    if (!detectedSite || previewDifficulty == null) {
+      return <p className="text-sm text-zinc-500">문제 링크를 입력하면 난이도가 표시됩니다.</p>;
+    }
+
+    if (detectedSite === "BAEKJOON") {
+      return (
+        <div className="flex items-center gap-3">
+          <Image
+            src={`https://static.solved.ac/tier_large/${previewDifficulty}.svg`}
+            alt="백준 난이도"
+            width={48}
+            height={48}
+            className="h-12 w-12"
+            unoptimized
+          />
+          <span className="text-sm font-semibold text-zinc-800">
+            Tier #{previewDifficulty}
+          </span>
+        </div>
+      );
+    }
+
+    const color = PROGRAMMERS_LEVEL_COLORS[previewDifficulty] ?? "#1bbaff";
+    return (
+      <span
+        className="inline-flex items-center rounded-full border border-current px-3 py-1 text-sm font-semibold"
+        style={{ color }}
+      >
+        Lv. {previewDifficulty}
+      </span>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
       <div
@@ -617,7 +819,7 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
               문제 직접 추가
             </h2>
             <p className="mt-2 text-sm text-zinc-600">
-              검색에 없는 문제를 직접 입력해 새로운 풀이 기록을 생성할 수 있습니다.
+              백준/프로그래머스 링크만 입력하면 주요 정보가 자동으로 채워집니다.
             </p>
           </div>
           <button
@@ -633,144 +835,155 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-5 px-6 py-6">
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              사이트 선택
+              사이트 자동 인식
             </label>
             <div className="flex flex-wrap gap-2">
-              {["백준", "프로그래머스", "기타"].map((label) => (
+              {[
+                { key: "BAEKJOON", label: "백준" },
+                { key: "PROGRAMMERS", label: "프로그래머스" },
+              ].map((item) => (
                 <button
-                  key={label}
+                  key={item.key}
                   type="button"
-                  className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900"
+                  disabled
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                    detectedSite === item.key
+                      ? "bg-zinc-900 text-white"
+                      : "border border-dashed border-zinc-300 bg-white text-zinc-400"
+                  }`}
                 >
-                  {label}
+                  {item.label}
                 </button>
               ))}
             </div>
+            <p className="text-xs text-zinc-500">
+              문제 링크를 입력하면 지원 사이트(백준/프로그래머스)를 자동으로 감지합니다.
+            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="사이트 문제 ID">
               <input
                 type="text"
-                placeholder="예: 1000"
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300"
+                value={detectedProblemId}
+                placeholder="문제 링크를 입력하면 자동으로 채워집니다."
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300 disabled:bg-zinc-50"
                 disabled
               />
             </Field>
             <Field label="문제명">
               <input
                 type="text"
-                placeholder="예: A+B"
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300"
+                value={previewTitle}
+                placeholder="문제 정보를 불러오면 제목이 표시됩니다."
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300 disabled:bg-zinc-50"
                 disabled
               />
             </Field>
           </div>
 
           <Field label="문제 링크">
-            <input
-              type="url"
-              placeholder="https://..."
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-300"
-              disabled
-            />
+            <div className="space-y-2">
+              <input
+                type="url"
+                placeholder="https://www.acmicpc.net/problem/1237"
+                value={problemLink}
+                onChange={(event) => setProblemLink(event.target.value)}
+                className={`w-full rounded-xl border px-3 py-2 text-sm text-zinc-700 outline-none ${
+                  linkError
+                    ? "border-rose-300 focus:border-rose-400"
+                    : "border-zinc-200 focus:border-zinc-300"
+                }`}
+              />
+              {linkError ? (
+                <p className="text-xs text-rose-500">{linkError}</p>
+              ) : (
+                <p className="text-xs text-zinc-500">
+                  백준/프로그래머스 문제 주소를 붙여넣으면 정보가 자동으로 채워집니다.
+                </p>
+              )}
+            </div>
           </Field>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="백준 티어 선택">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
-                선택 버튼은 추후 연동 예정입니다.
+          <Field label="난이도">{renderDifficultyContent()}</Field>
+
+          <div className="space-y-4">
+            <Field label="알고리즘 태그 선택">
+              <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                <label className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500 focus-within:border-zinc-300 focus-within:bg-white focus-within:text-zinc-700">
+                  <Search className="h-4 w-4" aria-hidden="true" />
+                  <input
+                    type="search"
+                    placeholder="태그 이름 또는 슬러그로 검색하세요"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="w-full border-none bg-transparent text-sm text-zinc-700 outline-none"
+                  />
+                </label>
+
+                <div className="min-h-[140px] rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4">
+                  {isLoadingTerms ? (
+                    <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      태그 목록을 불러오는 중입니다...
+                    </div>
+                  ) : termsError ? (
+                    <p className="text-center text-sm text-rose-500">{termsError}</p>
+                  ) : terms.length === 0 ? (
+                    <p className="text-center text-sm text-zinc-500">
+                      조건에 맞는 태그가 없습니다.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {terms.map((term) => (
+                        <button
+                          key={term.slug}
+                          type="button"
+                          onClick={() => toggleTerm(term.slug)}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                            selectedTerms.includes(term.slug)
+                              ? "border-zinc-900 bg-zinc-900 text-white"
+                              : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-900"
+                          }`}
+                        >
+                          {term.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </Field>
-            <Field label="백준 난이도 선택">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
-                선택 버튼은 추후 연동 예정입니다.
+
+            {selectedTerms.length > 0 ? (
+              <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  선택한 태그
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedTerms.map((slug) => {
+                    const term = terms.find((item) => item.slug === slug);
+                    return (
+                      <span
+                        key={slug}
+                        className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white"
+                      >
+                        {term?.name ?? slug}
+                        <button
+                          type="button"
+                          onClick={() => toggleTerm(slug)}
+                          aria-label={`${term?.name ?? slug} 태그 제거`}
+                          className="text-white/70 transition hover:text-white"
+                        >
+                          <X className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
-            </Field>
-            <Field label="프로그래머스 Level 선택">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
-                Level 선택 UI는 추후 추가됩니다.
-              </div>
-            </Field>
+            ) : null}
           </div>
-
-           <div className="space-y-4">
-             <Field label="알고리즘 태그 선택">
-               <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                 <label className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500 focus-within:border-zinc-300 focus-within:bg-white focus-within:text-zinc-700">
-                   <Search className="h-4 w-4" aria-hidden="true" />
-                   <input
-                     type="search"
-                     placeholder="태그 이름 또는 슬러그로 검색하세요"
-                     value={search}
-                     onChange={(event) => setSearch(event.target.value)}
-                     className="w-full border-none bg-transparent text-sm text-zinc-700 outline-none"
-                   />
-                 </label>
-
-                 <div className="min-h-[140px] rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4">
-                   {isLoadingTerms ? (
-                     <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-                       <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                       태그 목록을 불러오는 중입니다...
-                     </div>
-                   ) : termsError ? (
-                     <p className="text-center text-sm text-rose-500">{termsError}</p>
-                   ) : terms.length === 0 ? (
-                     <p className="text-center text-sm text-zinc-500">
-                       조건에 맞는 태그가 없습니다.
-                     </p>
-                   ) : (
-                     <div className="flex flex-wrap gap-2">
-                       {terms.map((term) => (
-                         <button
-                           key={term.slug}
-                           type="button"
-                           onClick={() => toggleTerm(term.slug)}
-                           className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                             selectedTerms.includes(term.slug)
-                               ? "border-zinc-900 bg-zinc-900 text-white"
-                               : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-900"
-                           }`}
-                         >
-                           {term.name}
-                         </button>
-                       ))}
-                     </div>
-                   )}
-                 </div>
-               </div>
-             </Field>
-
-             {selectedTerms.length > 0 ? (
-               <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
-                 <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                   선택한 태그
-                 </p>
-                 <div className="mt-3 flex flex-wrap gap-2">
-                   {selectedTerms.map((slug) => {
-                     const term = terms.find((item) => item.slug === slug);
-                     return (
-                       <span
-                         key={slug}
-                         className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white"
-                       >
-                         {term?.name ?? slug}
-                         <button
-                           type="button"
-                           onClick={() => toggleTerm(slug)}
-                           aria-label={`${term?.name ?? slug} 태그 제거`}
-                           className="text-white/70 transition hover:text-white"
-                         >
-                           <X className="h-3 w-3" aria-hidden="true" />
-                         </button>
-                       </span>
-                     );
-                   })}
-                 </div>
-               </div>
-             ) : null}
-           </div>
         </div>
 
         <footer className="flex justify-end gap-3 border-t border-zinc-200 px-6 py-5">
