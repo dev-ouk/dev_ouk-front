@@ -166,7 +166,10 @@ function getVerdictDisplay(verdict?: string | null) {
   };
 }
 
+type TabType = "problems" | "dsa";
+
 export default function CodingTestPage() {
+  const [activeTab, setActiveTab] = useState<TabType>("problems");
   const [problems, setProblems] = useState<Problem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -265,18 +268,61 @@ export default function CodingTestPage() {
           </code>{" "}
           응답을 기반으로 최근 코딩 테스트 풀이 내역을 보여줍니다.
         </p>
-        <div className="mt-6">
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
-          >
-            문제 풀이 기록 추가하기
-          </button>
-        </div>
       </header>
 
-      <section className="mt-10">{content}</section>
+      <div className="mt-8 max-w-4xl">
+        <div className="flex gap-1 border-b border-zinc-200">
+          <button
+            type="button"
+            onClick={() => setActiveTab("problems")}
+            className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
+              activeTab === "problems"
+                ? "text-zinc-900"
+                : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            풀이 기록
+            {activeTab === "problems" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("dsa")}
+            className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
+              activeTab === "dsa"
+                ? "text-zinc-900"
+                : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            DS&A 글
+            {activeTab === "dsa" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      <section className="mt-10">
+        {activeTab === "problems" ? (
+          <>
+            <div className="mb-6">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
+              >
+                문제 풀이 기록 추가하기
+              </button>
+            </div>
+            {content}
+          </>
+        ) : (
+          <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-center text-zinc-500">
+            <p className="text-sm font-medium">DS&A 글 섹션은 준비 중입니다.</p>
+          </div>
+        )}
+      </section>
 
       {isModalOpen ? (
         <AddProblemModal
