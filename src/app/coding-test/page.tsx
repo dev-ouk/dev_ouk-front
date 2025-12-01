@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
@@ -169,6 +170,7 @@ function getVerdictDisplay(verdict?: string | null) {
 type TabType = "problems" | "dsa";
 
 export default function CodingTestPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("problems");
   const [problems, setProblems] = useState<Problem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -323,6 +325,7 @@ export default function CodingTestPage() {
               <div className="mb-6">
                 <button
                   type="button"
+                  onClick={() => router.push("/coding-test/dsa/write")}
                   className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
                 >
                   글쓰기
