@@ -4,11 +4,16 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { SidebarLayout } from "../../../_components/sidebar-layout";
+import { DsnaEditor } from "../_components/dsna-editor";
 
 export default function DSAWritePage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [editorContent, setEditorContent] = useState<{
+    json: any;
+    html: string;
+    text: string;
+  } | null>(null);
 
   const handleCancel = () => {
     router.back();
@@ -16,7 +21,10 @@ export default function DSAWritePage() {
 
   const handleSubmit = () => {
     // TODO: API 연동
-    console.log("제출:", { title, content });
+    console.log("제출:", {
+      title,
+      content: editorContent,
+    });
   };
 
   return (
@@ -62,14 +70,18 @@ export default function DSAWritePage() {
             >
               본문
             </label>
-            <textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="글 내용을 입력하세요"
-              rows={20}
-              className="w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-300 focus:ring-2 focus:ring-zinc-200 resize-none"
+            <DsnaEditor
+              onChange={(value) => {
+                setEditorContent(value);
+              }}
             />
+            <p className="text-xs text-zinc-500">
+              마크다운 단축키: # (H1), ## (H2), ### (H3), - 또는 * (리스트), 1. (번호 리스트), ``` (코드 블록)
+              <br />
+              인라인 포맷: **굵게**, *기울임*, `코드`
+              <br />
+              단축키: Ctrl/Cmd + B (굵게), Ctrl/Cmd + I (기울임), Ctrl/Cmd + K (링크)
+            </p>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
