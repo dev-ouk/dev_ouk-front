@@ -319,9 +319,19 @@ export default function CodingTestPage() {
               {content}
             </>
           ) : (
-            <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-center text-zinc-500">
-              <p className="text-sm font-medium">DS&A 글 섹션은 준비 중입니다.</p>
-            </div>
+            <>
+              <div className="mb-6">
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
+                >
+                  글쓰기
+                </button>
+              </div>
+              <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-center text-zinc-500">
+                <p className="text-sm font-medium">DS&A 글 섹션은 준비 중입니다.</p>
+              </div>
+            </>
           )}
         </section>
       </div>
