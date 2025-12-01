@@ -257,72 +257,74 @@ export default function CodingTestPage() {
 
   return (
     <SidebarLayout>
-      <header className="max-w-4xl">
-        <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Coding Test
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold text-zinc-900">풀이 기록</h1>
-        <p className="mt-2 text-sm text-zinc-600">
-          <code className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700">
-            GET /api/v1/problems
-          </code>{" "}
-          응답을 기반으로 최근 코딩 테스트 풀이 내역을 보여줍니다.
-        </p>
-      </header>
+      <div className="mx-auto w-full max-w-4xl">
+        <header>
+          <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Coding Test
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold text-zinc-900">풀이 기록</h1>
+          <p className="mt-2 text-sm text-zinc-600">
+            <code className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700">
+              GET /api/v1/problems
+            </code>{" "}
+            응답을 기반으로 최근 코딩 테스트 풀이 내역을 보여줍니다.
+          </p>
+        </header>
 
-      <div className="mt-8 max-w-4xl">
-        <div className="flex gap-1 border-b border-zinc-200">
-          <button
-            type="button"
-            onClick={() => setActiveTab("problems")}
-            className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
-              activeTab === "problems"
-                ? "text-zinc-900"
-                : "text-zinc-500 hover:text-zinc-700"
-            }`}
-          >
-            풀이 기록
-            {activeTab === "problems" && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("dsa")}
-            className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
-              activeTab === "dsa"
-                ? "text-zinc-900"
-                : "text-zinc-500 hover:text-zinc-700"
-            }`}
-          >
-            DS&A 글
-            {activeTab === "dsa" && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      <section className="mt-10">
-        {activeTab === "problems" ? (
-          <>
-            <div className="mb-6">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(true)}
-                className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
-              >
-                문제 풀이 기록 추가하기
-              </button>
-            </div>
-            {content}
-          </>
-        ) : (
-          <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-center text-zinc-500">
-            <p className="text-sm font-medium">DS&A 글 섹션은 준비 중입니다.</p>
+        <div className="mt-8">
+          <div className="flex gap-1 border-b border-zinc-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab("problems")}
+              className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
+                activeTab === "problems"
+                  ? "text-zinc-900"
+                  : "text-zinc-500 hover:text-zinc-700"
+              }`}
+            >
+              풀이 기록
+              {activeTab === "problems" && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("dsa")}
+              className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
+                activeTab === "dsa"
+                  ? "text-zinc-900"
+                  : "text-zinc-500 hover:text-zinc-700"
+              }`}
+            >
+              DS&A 글
+              {activeTab === "dsa" && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900" />
+              )}
+            </button>
           </div>
-        )}
-      </section>
+        </div>
+
+        <section className="mt-10">
+          {activeTab === "problems" ? (
+            <>
+              <div className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(true)}
+                  className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
+                >
+                  문제 풀이 기록 추가하기
+                </button>
+              </div>
+              {content}
+            </>
+          ) : (
+            <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-center text-zinc-500">
+              <p className="text-sm font-medium">DS&A 글 섹션은 준비 중입니다.</p>
+            </div>
+          )}
+        </section>
+      </div>
 
       {isModalOpen ? (
         <AddProblemModal
