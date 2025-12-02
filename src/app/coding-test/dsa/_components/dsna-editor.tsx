@@ -291,7 +291,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none focus:outline-none min-h-[400px] px-4 py-3",
+          "dsna-editor ProseMirror focus:outline-none min-h-[400px] px-4 py-3",
       },
       handleKeyDown: (view: any, event: any) => {
         const { state } = view;
@@ -1008,28 +1008,27 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       )}
 
       <style jsx global>{`
-        .ProseMirror {
+        /* === 루트 === */
+        .dsna-editor.ProseMirror {
           outline: none;
           position: relative;
-          /* ✅ 항상 왼쪽에 핸들용 gutter 확보 (Notion처럼) */
+          /* Notion 스타일 gutter */
           padding-left: 2.5rem;
         }
-        /* 각 블록(문단, heading, 리스트 등) */
-        .ProseMirror > * {
+        /* 각 블록(문단, heading, 코드블록 등) */
+        .dsna-editor.ProseMirror > * {
           position: relative;
-          /* ✅ 텍스트는 padding 없이, 위 ProseMirror padding 기준으로 시작 */
           padding-left: 0;
           transition: background-color 0.2s;
         }
-        /* 블록 hover 시 배경만 바뀌되, ul/ol(리스트 컨테이너)은 제외 */
-        .ProseMirror > *:not(ul):not(ol):not(.is-empty):hover {
-          background-color: #fbfbfb; /* 기존 #fafafa → 아주 약간만 더 연하게 */
+        /* 블록 hover 시 배경 (ul/ol 제외) */
+        .dsna-editor.ProseMirror > *:not(ul):not(ol):hover {
+          background-color: #fbfbfb;
         }
-        /* 핸들 hit-area (보이지 않는 영역) */
-        .ProseMirror > *:not(ul):not(ol):not(.is-empty):hover::before {
+        /* 핸들용 hit-area */
+        .dsna-editor.ProseMirror > *:not(ul):not(ol):hover::before {
           content: "";
           position: absolute;
-          /* ✅ gutter 영역(텍스트 왼쪽)에만 존재하도록 음수 방향으로 빼기 */
           left: -2.5rem;
           top: 0;
           bottom: 0;
@@ -1039,61 +1038,97 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           justify-content: center;
           cursor: grab;
         }
-        /* 실제로 보이는 ⋮⋮ 아이콘 (ul/ol 제외) */
-        .ProseMirror > *:not(ul):not(ol):not(.is-empty):hover::after {
+        /* 🔥 실제로 보이는 ⋮⋮ 아이콘 (코드블록 포함) */
+        .dsna-editor.ProseMirror > *:not(ul):not(ol):hover::after {
           content: "⋮⋮";
           position: absolute;
-          left: -1.8rem;      /* gutter 안쪽에 고정 */
-          top: 0.45em;        /* ✅ 첫 줄 기준으로 고정 */
-          transform: none;    /* ✅ 가운데 정렬 제거 */
+          left: -1.8rem;
+          top: 0.45em;
+          transform: none;
           color: #a1a1aa;
           font-size: 0.75rem;
           line-height: 1;
           cursor: grab;
         }
-        /* ✅ 리스트 아이템도 개별 블록처럼 핸들 표시 */
-        /* 핸들: 기본은 안 보이다가 hover 때만 보이게 */
-        .ProseMirror li::after {
+        /* 리스트 컨테이너 기본 리셋 */
+        .dsna-editor.ProseMirror ul,
+        .dsna-editor.ProseMirror ol {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        /* 리스트 아이템 하나도 블록처럼 핸들 표시 */
+        .dsna-editor.ProseMirror li {
+          margin: 0.1em 0;
+          padding-left: 1.5rem;
+          position: relative;
+          display: block;
+          color: #171717;
+          min-height: 1.4em;
+          background-color: transparent;
+        }
+        .dsna-editor.ProseMirror li::before {
+          content: "•";
+          position: absolute;
+          left: 0;
+          color: #171717;
+          font-weight: bold;
+        }
+        .dsna-editor.ProseMirror ol {
+          counter-reset: list-counter;
+        }
+        .dsna-editor.ProseMirror ol li {
+          counter-increment: list-counter;
+        }
+        .dsna-editor.ProseMirror ol li::before {
+          content: counter(list-counter) ".";
+          position: absolute;
+          left: 0;
+          color: #171717;
+          font-weight: normal;
+        }
+        .dsna-editor.ProseMirror li:hover {
+          background-color: #fbfbfb;
+        }
+        /* 리스트 아이템 핸들 (hover 때만 보이게) */
+        .dsna-editor.ProseMirror li::after {
           content: "⋮⋮";
           position: absolute;
-          left: -1.8rem;       /* 다른 블록이랑 맞춤 */
-          top: 0.45em;         /* ✅ 리스트도 첫 줄 기준 */
-          transform: none;     /* ✅ 가운데 정렬 제거 */
+          left: -1.8rem;
+          top: 0.45em;
+          transform: none;
           color: #a1a1aa;
           font-size: 0.75rem;
           line-height: 1;
           cursor: grab;
-          opacity: 0;            /* 기본 숨김 */
+          opacity: 0;
         }
-        /* hover 시에만 핸들 보이기 */
-        .ProseMirror li:hover::after {
+        .dsna-editor.ProseMirror li:hover::after {
           opacity: 1;
         }
-        .ProseMirror > *:active {
+        .dsna-editor.ProseMirror > *:active {
           cursor: grabbing;
         }
-        .ProseMirror > *[draggable="true"] {
+        .dsna-editor.ProseMirror > *[draggable="true"] {
           cursor: grab;
         }
-        .ProseMirror > *[draggable="true"]:active {
+        .dsna-editor.ProseMirror > *[draggable="true"]:active {
           cursor: grabbing;
         }
-        /* ✅ HR 블록 wrapper (--- 로 생기는 선: 블록 간격/높이를 다른 블록이랑 비슷하게) */
-        .ProseMirror .dsna-hr-block {
+        /* === HR 블록 === */
+        .dsna-editor.ProseMirror .dsna-hr-block {
           position: relative;
-          margin: 0.25rem 0.15rem;   /* 위아래 약간, 좌우는 p랑 비슷하게 */
-          padding: 0.25rem 0;        /* hover 배경 조금 더 넓게 보이도록 */
-          min-height: 1.4em;         /* p의 min-height(1.4em)랑 맞춰줌 */
+          margin: 0.25rem 0.15rem;
+          padding: 0.25rem 0;
+          min-height: 1.4em;
         }
-        /* wrapper 안의 진짜 hr은 눈에 안 띄게 */
-        .ProseMirror .dsna-hr-block > hr {
+        .dsna-editor.ProseMirror .dsna-hr-block > hr {
           border: none;
           margin: 0;
           padding: 0;
           height: 0;
         }
-        /* 실제 선은 wrapper 중앙에 그리기 */
-        .ProseMirror .dsna-hr-block::before {
+        .dsna-editor.ProseMirror .dsna-hr-block::before {
           content: "";
           position: absolute;
           left: 0;
@@ -1103,76 +1138,35 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           border-top: 1px solid #e4e4e7;
           z-index: 0;
         }
-        /* Heading 스타일 (텍스트 위치는 항상 동일) */
-        .ProseMirror h1 {
+        /* === Heading / Paragraph === */
+        .dsna-editor.ProseMirror h1 {
           font-size: 2em;
           font-weight: bold;
-          margin-top: 0.9em;   /* 기존 1.5em → 줄임 */
-          margin-bottom: 0.25em; /* 기존 0.5em → 줄임 */
+          margin-top: 0.9em;
+          margin-bottom: 0.25em;
           line-height: 1.25;
         }
-        .ProseMirror h2 {
+        .dsna-editor.ProseMirror h2 {
           font-size: 1.5em;
           font-weight: bold;
-          margin-top: 0.7em;     /* 기존 1.25em → 줄임 */
+          margin-top: 0.7em;
           margin-bottom: 0.25em;
           line-height: 1.3;
         }
-        .ProseMirror h3 {
+        .dsna-editor.ProseMirror h3 {
           font-size: 1.25em;
           font-weight: 600;
-          margin-top: 0.55em;     /* 기존 1em → 줄임 */
+          margin-top: 0.55em;
           margin-bottom: 0.2em;
           line-height: 1.35;
         }
-        .ProseMirror p {
-          margin: 0.15rem 0;      /* 기존 margin-bottom: 0.75em → 전체 간격 대폭 축소 */
-          line-height: 1.55;      /* 살짝 타이트하게 */
+        .dsna-editor.ProseMirror p {
+          margin: 0.15rem 0;
+          line-height: 1.55;
           min-height: 1.4em;
         }
-        /* 리스트 기본 스타일 재정의 */
-        .ProseMirror ul,
-        .ProseMirror ol {
-          margin: 0;
-          padding: 0;
-          list-style: none;
-        }
-        .ProseMirror li {
-          margin: 0.1em 0;        /* 기존 0.5em → 많이 줄임 */
-          /* ✅ 텍스트 기준으로 bullet만 살짝 안쪽으로 */
-          padding-left: 1.5rem;
-          position: relative;
-          display: block;
-          color: #171717;
-          min-height: 1.4em;
-          background-color: transparent;
-        }
-        /* 불릿 위치 (텍스트 기준) */
-        .ProseMirror li::before {
-          content: "•";
-          position: absolute;
-          left: 0;
-          color: #171717;
-          font-weight: bold;
-        }
-        /* 번호 있는 리스트용 카운터 */
-        .ProseMirror ol {
-          counter-reset: list-counter;
-        }
-        .ProseMirror ol li {
-          counter-increment: list-counter;
-        }
-        .ProseMirror ol li::before {
-          content: counter(list-counter) ".";
-          position: absolute;
-          left: 0;
-          color: #171717;
-          font-weight: normal;
-        }
-        .ProseMirror li:hover {
-          background-color: #fbfbfb; /* 기존 #fafafa → 아주 약간만 더 연하게 */
-        }
-        .ProseMirror code {
+        /* === 코드 === */
+        .dsna-editor.ProseMirror code {
           background-color: #f4f4f5;
           padding: 0.125rem 0.375rem;
           border-radius: 0.25rem;
@@ -1180,62 +1174,65 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           font-size: 0.875em;
           color: #dc2626;
         }
-        .ProseMirror pre {
+        /* 🔥 코드블록 wrapper (여기에 핸들 붙음) */
+        .dsna-editor.ProseMirror pre {
           background-color: #f4f4f5;
           padding: 1rem;
           border-radius: 0.5rem;
-          overflow-x: auto;
           margin: 1em 0;
+          position: relative;
+          overflow: visible; /* ← 여기서 더 이상 자르지 않음 */
         }
-        .ProseMirror pre code {
+        /* 실제 스크롤은 code가 담당 */
+        .dsna-editor.ProseMirror pre code {
+          display: block;
           background-color: transparent;
           padding: 0;
           color: inherit;
+          white-space: pre;
+          overflow-x: auto;
+          overflow-y: hidden;
         }
-        .ProseMirror strong {
+        /* === 마크 / 링크 === */
+        .dsna-editor.ProseMirror strong {
           font-weight: bold;
         }
-        .ProseMirror em {
+        .dsna-editor.ProseMirror em {
           font-style: italic;
         }
-        .ProseMirror a {
+        .dsna-editor.ProseMirror a {
           color: #2563eb;
           text-decoration: underline;
         }
-        .ProseMirror a:hover {
+        .dsna-editor.ProseMirror a:hover {
           color: #1d4ed8;
         }
-        /* ✅ 공통 placeholder: "일반 블록"용 (문단 / 제목) */
-        .ProseMirror p.is-empty::before,
-        .ProseMirror h1.is-empty::before,
-        .ProseMirror h2.is-empty::before,
-        .ProseMirror h3.is-empty::before {
+        /* === Placeholder === */
+        .dsna-editor.ProseMirror p.is-empty::before,
+        .dsna-editor.ProseMirror h1.is-empty::before,
+        .dsna-editor.ProseMirror h2.is-empty::before,
+        .dsna-editor.ProseMirror h3.is-empty::before {
           content: attr(data-placeholder);
           position: absolute;
-          left: 0;        /* 문단 텍스트 시작 위치 */
+          left: 0;
           top: 0;
           color: #a1a1aa;
           pointer-events: none;
           white-space: nowrap;
         }
-        /* 기본은 문단처럼 padding 없음 */
-        .ProseMirror p.is-empty,
-        .ProseMirror h1.is-empty,
-        .ProseMirror h2.is-empty,
-        .ProseMirror h3.is-empty {
+        .dsna-editor.ProseMirror p.is-empty,
+        .dsna-editor.ProseMirror h1.is-empty,
+        .dsna-editor.ProseMirror h2.is-empty,
+        .dsna-editor.ProseMirror h3.is-empty {
           padding-left: 0;
         }
-        /* ✅ 리스트 안에 들어간 placeholder: 불릿 뒤 텍스트 자리 맞추기 */
-        .ProseMirror li > p.is-empty::before {
-          /* li 자체에 padding-left: 1.5rem; 이라
-             여기선 굳이 더 밀 필요 없지만,
-             혹시 불릿이랑 겹쳐 보이면 0.2rem 정도 더 밀어줘도 됨 */
+        .dsna-editor.ProseMirror li > p.is-empty::before {
           left: 0;
         }
-        .ProseMirror pre.is-empty::before {
+        .dsna-editor.ProseMirror pre.is-empty::before {
           display: none;
         }
-        .ProseMirror codeBlock.is-empty::before {
+        .dsna-editor.ProseMirror codeBlock.is-empty::before {
           display: none;
         }
       `}</style>
