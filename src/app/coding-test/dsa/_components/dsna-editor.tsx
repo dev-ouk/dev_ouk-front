@@ -698,9 +698,9 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .ProseMirror > *:not(ul):not(ol):not(.is-empty):hover::after {
           content: "⋮⋮";
           position: absolute;
-          left: -1.8rem; /* gutter 안쪽에 고정 */
-          top: 50%;
-          transform: translateY(-50%);
+          left: -1.8rem;      /* gutter 안쪽에 고정 */
+          top: 0.45em;        /* ✅ 첫 줄 기준으로 고정 */
+          transform: none;    /* ✅ 가운데 정렬 제거 */
           color: #a1a1aa;
           font-size: 0.75rem;
           line-height: 1;
@@ -711,9 +711,9 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .ProseMirror li::after {
           content: "⋮⋮";
           position: absolute;
-          left: -1.8rem;         /* 다른 블록이랑 맞춤 */
-          top: 50%;
-          transform: translateY(-50%);
+          left: -1.8rem;       /* 다른 블록이랑 맞춤 */
+          top: 0.45em;         /* ✅ 리스트도 첫 줄 기준 */
+          transform: none;     /* ✅ 가운데 정렬 제거 */
           color: #a1a1aa;
           font-size: 0.75rem;
           line-height: 1;
