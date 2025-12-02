@@ -24,9 +24,235 @@ export type DsnaEditorProps = {
   onChange?: (value: { json: any; html: string; text: string }) => void;
 };
 
+// ✅ 이모지 리스트 정의
+const EMOJIS = [
+  // 😀 기본 얼굴
+  { shortcode: "grinning", emoji: "😀" },
+  { shortcode: "grin", emoji: "😁" },
+  { shortcode: "joy", emoji: "😂" },
+  { shortcode: "rofl", emoji: "🤣" },
+  { shortcode: "smile", emoji: "😄" },
+  { shortcode: "happy", emoji: "😊" },
+  { shortcode: "blush", emoji: "😊" },
+  { shortcode: "relaxed", emoji: "☺️" },
+  { shortcode: "wink", emoji: "😉" },
+  { shortcode: "yum", emoji: "😋" },
+  { shortcode: "sunglasses", emoji: "😎" },
+  { shortcode: "neutral", emoji: "😐" },
+  { shortcode: "thinking", emoji: "🤔" },
+  { shortcode: "expressionless", emoji: "😑" },
+  { shortcode: "unamused", emoji: "😒" },
+
+  // 😢 슬픈 / 불편
+  { shortcode: "cry", emoji: "😢" },
+  { shortcode: "sob", emoji: "😭" },
+  { shortcode: "disappointed", emoji: "😞" },
+  { shortcode: "worried", emoji: "😟" },
+  { shortcode: "pensive", emoji: "😔" },
+  { shortcode: "tired", emoji: "😫" },
+  { shortcode: "weary", emoji: "😩" },
+  { shortcode: "persevere", emoji: "😣" },
+  { shortcode: "confounded", emoji: "😖" },
+  { shortcode: "sweat", emoji: "😓" },
+  { shortcode: "cold_sweat", emoji: "😰" },
+
+  // 😡 분노 / 짜증
+  { shortcode: "angry", emoji: "😠" },
+  { shortcode: "rage", emoji: "😡" },
+  { shortcode: "triumph", emoji: "😤" },
+  { shortcode: "exploding_head", emoji: "🤯" },
+  { shortcode: "cursing", emoji: "🤬" },
+
+  // 🤯 특수 감정
+  { shortcode: "mind_blown", emoji: "🤯" },
+  { shortcode: "shocked", emoji: "😱" },
+  { shortcode: "scream", emoji: "😱" },
+  { shortcode: "astonished", emoji: "😲" },
+  { shortcode: "flushed", emoji: "😳" },
+  { shortcode: "zip_mouth", emoji: "🤐" },
+  { shortcode: "sleeping", emoji: "😴" },
+  { shortcode: "sleepy", emoji: "😪" },
+  { shortcode: "dizzy_face", emoji: "😵" },
+  { shortcode: "hot", emoji: "🥵" },
+  { shortcode: "cold", emoji: "🥶" },
+  { shortcode: "nerd", emoji: "🤓" },
+  { shortcode: "smirk", emoji: "😏" },
+  { shortcode: "relieved", emoji: "😌" },
+
+  // 😷 건강 / 병
+  { shortcode: "mask", emoji: "😷" },
+  { shortcode: "sick", emoji: "🤒" },
+  { shortcode: "nauseated", emoji: "🤢" },
+  { shortcode: "vomiting", emoji: "🤮" },
+  { shortcode: "sneezing", emoji: "🤧" },
+
+  // 🤗 제스처 / 사람
+  { shortcode: "wave", emoji: "👋" },
+  { shortcode: "raised_hand", emoji: "✋" },
+  { shortcode: "hand", emoji: "✋" },
+  { shortcode: "ok_hand", emoji: "👌" },
+  { shortcode: "thumbs_up", emoji: "👍" },
+  { shortcode: "thumbs_down", emoji: "👎" },
+  { shortcode: "clap", emoji: "👏" },
+  { shortcode: "pray", emoji: "🙏" },
+  { shortcode: "muscle", emoji: "💪" },
+  { shortcode: "point_up", emoji: "☝️" },
+  { shortcode: "point_up_2", emoji: "👆" },
+  { shortcode: "point_down", emoji: "👇" },
+  { shortcode: "point_left", emoji: "👈" },
+  { shortcode: "point_right", emoji: "👉" },
+  { shortcode: "folded_hands", emoji: "🙏" },
+
+  // ❤️ 하트류
+  { shortcode: "heart", emoji: "❤️" },
+  { shortcode: "orange_heart", emoji: "🧡" },
+  { shortcode: "yellow_heart", emoji: "💛" },
+  { shortcode: "green_heart", emoji: "💚" },
+  { shortcode: "blue_heart", emoji: "💙" },
+  { shortcode: "purple_heart", emoji: "💜" },
+  { shortcode: "black_heart", emoji: "🖤" },
+  { shortcode: "broken_heart", emoji: "💔" },
+  { shortcode: "two_hearts", emoji: "💕" },
+  { shortcode: "sparkling_heart", emoji: "💖" },
+  { shortcode: "heartbeat", emoji: "💓" },
+  { shortcode: "revolving_hearts", emoji: "💞" },
+
+  // 🔥 상태 / 반응
+  { shortcode: "fire", emoji: "🔥" },
+  { shortcode: "star", emoji: "⭐" },
+  { shortcode: "sparkles", emoji: "✨" },
+  { shortcode: "boom", emoji: "💥" },
+  { shortcode: "collision", emoji: "💥" },
+  { shortcode: "100", emoji: "💯" },
+  { shortcode: "check", emoji: "✅" },
+  { shortcode: "cross_mark", emoji: "❌" },
+  { shortcode: "warning", emoji: "⚠️" },
+  { shortcode: "info", emoji: "ℹ️" },
+  { shortcode: "question", emoji: "❓" },
+  { shortcode: "grey_question", emoji: "❔" },
+  { shortcode: "grey_exclamation", emoji: "❕" },
+  { shortcode: "exclamation", emoji: "❗" },
+  { shortcode: "double_exclamation", emoji: "‼️" },
+
+  // 💻 개발 / 작업 느낌
+  { shortcode: "laptop", emoji: "💻" },
+  { shortcode: "desktop", emoji: "🖥️" },
+  { shortcode: "keyboard", emoji: "⌨️" },
+  { shortcode: "gear", emoji: "⚙️" },
+  { shortcode: "hammer_wrench", emoji: "🛠️" },
+  { shortcode: "bulb", emoji: "💡" },
+  { shortcode: "memo", emoji: "📝" },
+  { shortcode: "bookmark", emoji: "🔖" },
+  { shortcode: "link", emoji: "🔗" },
+  { shortcode: "paperclip", emoji: "📎" },
+  { shortcode: "pushpin", emoji: "📌" },
+  { shortcode: "calendar", emoji: "📅" },
+  { shortcode: "hourglass", emoji: "⌛" },
+  { shortcode: "alarm", emoji: "⏰" },
+  { shortcode: "clipboard", emoji: "📋" },
+  { shortcode: "chart_up", emoji: "📈" },
+  { shortcode: "chart_down", emoji: "📉" },
+  { shortcode: "file_folder", emoji: "📁" },
+  { shortcode: "open_folder", emoji: "📂" },
+  { shortcode: "package", emoji: "📦" },
+  { shortcode: "lock", emoji: "🔒" },
+  { shortcode: "unlock", emoji: "🔓" },
+  { shortcode: "key", emoji: "🔑" },
+
+  // 🐛 디버깅 / 경고
+  { shortcode: "bug", emoji: "🐛" },
+  { shortcode: "beetle", emoji: "🪲" },
+  { shortcode: "warning_bug", emoji: "🐞" },
+
+  // 📱 기기 / 미디어
+  { shortcode: "iphone", emoji: "📱" },
+  { shortcode: "phone", emoji: "☎️" },
+  { shortcode: "camera", emoji: "📷" },
+  { shortcode: "movie_camera", emoji: "🎥" },
+  { shortcode: "clapper", emoji: "🎬" },
+  { shortcode: "headphones", emoji: "🎧" },
+  { shortcode: "microphone", emoji: "🎤" },
+  { shortcode: "tv", emoji: "📺" },
+  { shortcode: "gamepad", emoji: "🎮" },
+
+  // 🍕 음식 / 카페 감성
+  { shortcode: "coffee", emoji: "☕" },
+  { shortcode: "tea", emoji: "🫖" },
+  { shortcode: "beer", emoji: "🍺" },
+  { shortcode: "wine", emoji: "🍷" },
+  { shortcode: "cocktail", emoji: "🍸" },
+  { shortcode: "bento", emoji: "🍱" },
+  { shortcode: "ramen", emoji: "🍜" },
+  { shortcode: "pizza", emoji: "🍕" },
+  { shortcode: "burger", emoji: "🍔" },
+  { shortcode: "fries", emoji: "🍟" },
+  { shortcode: "chicken", emoji: "🍗" },
+  { shortcode: "meat", emoji: "🥩" },
+  { shortcode: "salad", emoji: "🥗" },
+  { shortcode: "cake", emoji: "🍰" },
+  { shortcode: "cookie", emoji: "🍪" },
+  { shortcode: "icecream", emoji: "🍨" },
+
+  // 🏃‍♂️ 활동 / 운동
+  { shortcode: "run", emoji: "🏃‍♂️" },
+  { shortcode: "walk", emoji: "🚶‍♂️" },
+  { shortcode: "gym", emoji: "🏋️‍♂️" },
+  { shortcode: "yoga", emoji: "🧘‍♂️" },
+  { shortcode: "biking", emoji: "🚴‍♂️" },
+  { shortcode: "swim", emoji: "🏊‍♂️" },
+  { shortcode: "soccer", emoji: "⚽" },
+  { shortcode: "basketball", emoji: "🏀" },
+  { shortcode: "football", emoji: "🏈" },
+  { shortcode: "baseball", emoji: "⚾" },
+  { shortcode: "medal", emoji: "🏅" },
+  { shortcode: "trophy", emoji: "🏆" },
+
+  // 🌍 자연 / 날씨
+  { shortcode: "sunny", emoji: "☀️" },
+  { shortcode: "cloud", emoji: "☁️" },
+  { shortcode: "rain", emoji: "🌧️" },
+  { shortcode: "thunder", emoji: "⛈️" },
+  { shortcode: "snow", emoji: "❄️" },
+  { shortcode: "rainbow", emoji: "🌈" },
+  { shortcode: "star2", emoji: "🌟" },
+  { shortcode: "moon", emoji: "🌙" },
+  { shortcode: "earth", emoji: "🌍" },
+  { shortcode: "fireworks", emoji: "🎆" },
+  { shortcode: "cherry_blossom", emoji: "🌸" },
+  { shortcode: "leaf", emoji: "🍃" },
+
+  // 🎉 파티 / 축하
+  { shortcode: "tada", emoji: "🎉" },
+  { shortcode: "confetti_ball", emoji: "🎊" },
+  { shortcode: "party", emoji: "🥳" },
+  { shortcode: "gift", emoji: "🎁" },
+  { shortcode: "balloon", emoji: "🎈" },
+  { shortcode: "sparkler", emoji: "🎇" },
+
+  // 🧠 감정/상태 상징
+  { shortcode: "brain", emoji: "🧠" },
+  { shortcode: "zzz", emoji: "💤" },
+  { shortcode: "sweat_drops", emoji: "💦" },
+  { shortcode: "anger_symbol", emoji: "💢" },
+  { shortcode: "thought_balloon", emoji: "💭" },
+  { shortcode: "speech_balloon", emoji: "💬" },
+
+  // 📌 기타 심볼
+  { shortcode: "pin", emoji: "📌" },
+  { shortcode: "top", emoji: "🔝" },
+  { shortcode: "soon", emoji: "🔜" },
+  { shortcode: "repeat", emoji: "🔁" },
+  { shortcode: "recycle", emoji: "♻️" },
+  { shortcode: "infinity", emoji: "♾️" },
+];
+
 export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
   const [draggedBlock, setDraggedBlock] = useState<number | null>(null);
   const [dragOverBlock, setDragOverBlock] = useState<number | null>(null);
+  // ✅ 이모지 추천 상태
+  const [emojiQuery, setEmojiQuery] = useState<string | null>(null);
+  const [emojiCoords, setEmojiCoords] = useState<{ left: number; top: number } | null>(null);
+  const [emojiResults, setEmojiResults] = useState<typeof EMOJIS>([]);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
@@ -512,6 +738,93 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     };
   }, [editor]);
 
+  // ✅ :이모지 자동완성 감지
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleUpdate = () => {
+      const { state } = editor;
+      const { from } = state.selection;
+
+      // 커서 앞 30글자만 보면 충분
+      const textBefore = state.doc.textBetween(Math.max(0, from - 30), from, "", "");
+
+      const match = /:([a-zA-Z0-9_+-]*)$/.exec(textBefore);
+
+      if (match) {
+        const query = match[1]; // ':' 뒤의 문자열 (비어있을 수도 있음)
+
+        setEmojiQuery(query);
+
+        // 위치 계산 (커서 아래에 팝업)
+        const coords = editor.view.coordsAtPos(from);
+
+        setEmojiCoords({ left: coords.left, top: coords.bottom + 4 });
+
+        // 필터링
+        const filtered =
+          query.length === 0
+            ? EMOJIS.slice(0, 5)
+            : EMOJIS.filter((e) =>
+                e.shortcode.toLowerCase().includes(query.toLowerCase())
+              ).slice(0, 8);
+
+        setEmojiResults(filtered);
+      } else {
+        // 콜론 패턴 아니면 팝업 닫기
+        setEmojiQuery(null);
+        setEmojiCoords(null);
+        setEmojiResults([]);
+      }
+    };
+
+    editor.on("update", handleUpdate);
+    editor.on("selectionUpdate", handleUpdate);
+
+    return () => {
+      editor.off("update", handleUpdate);
+      editor.off("selectionUpdate", handleUpdate);
+    };
+  }, [editor]);
+
+  // ✅ 이모지 선택 핸들러
+  const handleSelectEmoji = (emoji: string) => {
+    if (!editor) return;
+
+    const { state } = editor;
+    const { from } = state.selection;
+
+    // 커서 기준으로 다시 매칭
+    const textBefore = state.doc.textBetween(Math.max(0, from - 30), from, "", "");
+
+    const match = /:([a-zA-Z0-9_+-]*)$/.exec(textBefore);
+
+    if (!match) {
+      // 혹시나 사이에 뭔가 바뀌었으면 그냥 무시
+      setEmojiQuery(null);
+      setEmojiCoords(null);
+      setEmojiResults([]);
+      return;
+    }
+
+    const matchLength = match[0].length; // ':smile' 길이
+
+    const fromPos = from - matchLength;
+    const toPos = from;
+
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: fromPos, to: toPos })
+      .insertContent(emoji + " ")
+      .run();
+
+    // 선택하고 나면 팝업 닫기
+    setEmojiQuery(null);
+    setEmojiCoords(null);
+    setEmojiResults([]);
+  };
+
   // Drag & Drop 기능 구현
   useEffect(() => {
     if (!editor || !editorRef.current) return;
@@ -662,6 +975,38 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       <div className="rounded-xl border border-zinc-200 bg-white">
         <EditorContent editor={editor} />
       </div>
+
+      {/* ✅ 이모지 자동완성 팝업 */}
+      {emojiCoords && emojiResults.length > 0 && (
+        <div
+          className="fixed z-50 rounded-md border border-zinc-200 bg-white shadow-lg text-xs"
+          style={{
+            left: emojiCoords.left,
+            top: emojiCoords.top,
+          }}
+        >
+          <div className="max-h-56 w-48 overflow-y-auto py-1">
+            {emojiResults.map((item) => (
+              <button
+                key={item.shortcode}
+                type="button"
+                className="flex w-full items-center gap-2 px-2 py-1 hover:bg-zinc-100 text-left"
+                onMouseDown={(e) => {
+                  // blur 방지
+                  e.preventDefault();
+                  handleSelectEmoji(item.emoji);
+                }}
+              >
+                <span className="text-base">{item.emoji}</span>
+                <span className="text-[11px] text-zinc-600">
+                  :{item.shortcode}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         .ProseMirror {
           outline: none;
