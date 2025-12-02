@@ -42,9 +42,13 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       // ✅ 따로 HorizontalRule 추가 (블록용 클래스를 붙이기 위해)
       HorizontalRule.extend({
         draggable: true, // 드래그도 블록처럼
-      }).configure({
-        HTMLAttributes: {
-          class: "dsna-hr-block",
+        // hr을 바로 쓰지 말고, div 블록 안에 감싸기
+        renderHTML({ HTMLAttributes }) {
+          return [
+            "div",
+            { class: "dsna-hr-block" },       // 블록 역할을 하는 wrapper
+            ["hr", HTMLAttributes],           // 실제 선은 안쪽 hr
+          ];
         },
       }),
       Placeholder.configure({
@@ -515,12 +519,28 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     const editorElement = editorRef.current;
     let draggedBlockIndex: number | null = null;
 
+    // ✅ 노션처럼: "블록"으로 쓸 DOM 요소 목록
+    // - 최상위 블록(.ProseMirror > *) 중 ul/ol은 제외
+    // - 그 대신 li(리스트 아이템)을 개별 블록으로 포함
+    const getBlocks = () =>
+      Array.from(
+        editorElement.querySelectorAll(
+          ".ProseMirror li, .ProseMirror > *:not(ul):not(ol)"
+        )
+      );
+
     const handleDragStart = (event: DragEvent) => {
       const target = event.target as HTMLElement;
-      const blockElement = target.closest(".ProseMirror > *");
+
+      // ✅ 1순위: li (리스트 아이템)을 블록으로 보고,
+      //    없으면 최상위 블록(.ProseMirror > *)를 쓴다.
+      const blockElement =
+        target.closest(".ProseMirror li") ??
+        target.closest(".ProseMirror > *:not(ul):not(ol)");
+
       if (!blockElement) return;
 
-      const blocks = Array.from(editorElement.querySelectorAll(".ProseMirror > *"));
+      const blocks = getBlocks();
       draggedBlockIndex = blocks.indexOf(blockElement);
       setDraggedBlock(draggedBlockIndex);
 
@@ -541,9 +561,12 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       event.dataTransfer!.dropEffect = "move";
 
       const target = event.target as HTMLElement;
-      const blockElement = target.closest(".ProseMirror > *");
+      const blockElement =
+        target.closest(".ProseMirror li") ??
+        target.closest(".ProseMirror > *:not(ul):not(ol)");
+
       if (blockElement) {
-        const blocks = Array.from(editorElement.querySelectorAll(".ProseMirror > *"));
+        const blocks = getBlocks();
         const blockIndex = blocks.indexOf(blockElement);
         if (blockIndex !== draggedBlockIndex) {
           setDragOverBlock(blockIndex);
@@ -558,41 +581,55 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     const handleDrop = (event: DragEvent) => {
       event.preventDefault();
       const target = event.target as HTMLElement;
-      const blockElement = target.closest(".ProseMirror > *");
-      
+      const blockElement =
+        target.closest(".ProseMirror li") ??
+        target.closest(".ProseMirror > *:not(ul):not(ol)");
+
       if (blockElement && draggedBlockIndex !== null) {
-        const blocks = Array.from(editorElement.querySelectorAll(".ProseMirror > *"));
+        const blocks = getBlocks();
         const dropBlockIndex = blocks.indexOf(blockElement);
 
         if (draggedBlockIndex !== dropBlockIndex) {
           const { state } = editor.view;
           const { tr } = state;
-          
-          // 블록 위치 계산
-          const draggedPos = editor.view.posAtDOM(blocks[draggedBlockIndex] as Node, 0);
-          const dropPos = editor.view.posAtDOM(blocks[dropBlockIndex] as Node, 0);
-          
-          // 블록 찾기
+
+          const draggedDom = blocks[draggedBlockIndex] as Node;
+          const dropDom = blocks[dropBlockIndex] as Node;
+
+          const draggedPos = editor.view.posAtDOM(draggedDom, 0);
+          const dropPos = editor.view.posAtDOM(dropDom, 0);
+
           const draggedNode = state.doc.nodeAt(draggedPos);
           const dropNode = state.doc.nodeAt(dropPos);
-          
+
           if (draggedNode && dropNode) {
-            // 블록 이동
+            const isDraggedListItem = draggedNode.type.name === "listItem";
+            const isDropListItem = dropNode.type.name === "listItem";
+
+            // ✅ 일단은 리스트 밖으로 끄집어내는 건 막고,
+            //    li ↔ li, 블록 ↔ 블록 만 이동 허용
+            if (isDraggedListItem !== isDropListItem) {
+              setDraggedBlock(null);
+              setDragOverBlock(null);
+              draggedBlockIndex = null;
+              return;
+            }
+
             const draggedStart = draggedPos;
             const draggedEnd = draggedPos + draggedNode.nodeSize;
-            
+
             if (draggedBlockIndex < dropBlockIndex) {
               // 아래로 이동
               tr.delete(draggedStart, draggedEnd);
-              const newDropPos = editor.view.posAtDOM(blocks[dropBlockIndex] as Node, 0);
+              const newDropPos = editor.view.posAtDOM(dropDom, 0);
               tr.insert(newDropPos + dropNode.nodeSize, draggedNode);
             } else {
               // 위로 이동
-              const newDropPos = editor.view.posAtDOM(blocks[dropBlockIndex] as Node, 0);
+              const newDropPos = editor.view.posAtDOM(dropDom, 0);
               tr.insert(newDropPos, draggedNode);
               tr.delete(draggedStart, draggedEnd);
             }
-            
+
             editor.view.dispatch(tr);
           }
         }
@@ -639,12 +676,12 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           padding-left: 0;
           transition: background-color 0.2s;
         }
-        /* 블록 hover 시 배경만 바뀌고, 텍스트 위치는 그대로 */
-        .ProseMirror > *:not(.is-empty):hover {
-          background-color: #fafafa;
+        /* 블록 hover 시 배경만 바뀌되, ul/ol(리스트 컨테이너)은 제외 */
+        .ProseMirror > *:not(ul):not(ol):not(.is-empty):hover {
+          background-color: #fbfbfb; /* 기존 #fafafa → 아주 약간만 더 연하게 */
         }
         /* 핸들 hit-area (보이지 않는 영역) */
-        .ProseMirror > *:not(.is-empty):hover::before {
+        .ProseMirror > *:not(ul):not(ol):not(.is-empty):hover::before {
           content: "";
           position: absolute;
           /* ✅ gutter 영역(텍스트 왼쪽)에만 존재하도록 음수 방향으로 빼기 */
@@ -657,8 +694,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           justify-content: center;
           cursor: grab;
         }
-        /* 실제로 보이는 ⋮⋮ 아이콘 */
-        .ProseMirror > *:not(.is-empty):hover::after {
+        /* 실제로 보이는 ⋮⋮ 아이콘 (ul/ol 제외) */
+        .ProseMirror > *:not(ul):not(ol):not(.is-empty):hover::after {
           content: "⋮⋮";
           position: absolute;
           left: -1.8rem; /* gutter 안쪽에 고정 */
@@ -669,6 +706,24 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           line-height: 1;
           cursor: grab;
         }
+        /* ✅ 리스트 아이템도 개별 블록처럼 핸들 표시 */
+        /* 핸들: 기본은 안 보이다가 hover 때만 보이게 */
+        .ProseMirror li::after {
+          content: "⋮⋮";
+          position: absolute;
+          left: -1.8rem;         /* 다른 블록이랑 맞춤 */
+          top: 50%;
+          transform: translateY(-50%);
+          color: #a1a1aa;
+          font-size: 0.75rem;
+          line-height: 1;
+          cursor: grab;
+          opacity: 0;            /* 기본 숨김 */
+        }
+        /* hover 시에만 핸들 보이기 */
+        .ProseMirror li:hover::after {
+          opacity: 1;
+        }
         .ProseMirror > *:active {
           cursor: grabbing;
         }
@@ -678,71 +733,57 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .ProseMirror > *[draggable="true"]:active {
           cursor: grabbing;
         }
-        /* ✅ HR 블록 스타일링 (--- 로 생기는 선: 블록 중앙 정렬) */
-        .ProseMirror hr,
+        /* ✅ HR 블록 wrapper (--- 로 생기는 선: 블록 간격/높이를 다른 블록이랑 비슷하게) */
         .ProseMirror .dsna-hr-block {
           position: relative;
-          margin: 0.75rem 0;
-          border: none;       /* 기본 border 제거 */
-          height: 1.5rem;     /* 블록 자체 높이(hover, 드래그 hit-area) */
+          margin: 0.25rem 0.15rem;   /* 위아래 약간, 좌우는 p랑 비슷하게 */
+          padding: 0.25rem 0;        /* hover 배경 조금 더 넓게 보이도록 */
+          min-height: 1.4em;         /* p의 min-height(1.4em)랑 맞춰줌 */
         }
-        /* 실제 선은 가운데에 그리기 */
-        .ProseMirror hr::before,
+        /* wrapper 안의 진짜 hr은 눈에 안 띄게 */
+        .ProseMirror .dsna-hr-block > hr {
+          border: none;
+          margin: 0;
+          padding: 0;
+          height: 0;
+        }
+        /* 실제 선은 wrapper 중앙에 그리기 */
         .ProseMirror .dsna-hr-block::before {
           content: "";
           position: absolute;
           left: 0;
           right: 0;
-          top: 50%;                    /* 블록 세로 중앙 */
-          transform: translateY(-50%); /* 정확히 가운데 정렬 */
-          border-top: 1px solid #e4e4e7;
-          z-index: 0;                  /* hover 핸들 아래에 배치 */
-        }
-        /* HR 블록 hover 시 핸들 hit-area (선 위에 표시) */
-        .ProseMirror hr:hover::before,
-        .ProseMirror .dsna-hr-block:hover::before {
-          border-top: 1px solid #e4e4e7;
-          z-index: 0;
-        }
-        .ProseMirror hr:hover::after,
-        .ProseMirror .dsna-hr-block:hover::after {
-          content: "⋮⋮";
-          position: absolute;
-          left: -1.8rem;
           top: 50%;
           transform: translateY(-50%);
-          color: #a1a1aa;
-          font-size: 0.75rem;
-          line-height: 1;
-          cursor: grab;
-          z-index: 1;                  /* 선 위에 표시 */
+          border-top: 1px solid #e4e4e7;
+          z-index: 0;
         }
         /* Heading 스타일 (텍스트 위치는 항상 동일) */
         .ProseMirror h1 {
           font-size: 2em;
           font-weight: bold;
-          margin-top: 1.5em;
-          margin-bottom: 0.5em;
-          line-height: 1.2;
+          margin-top: 0.9em;   /* 기존 1.5em → 줄임 */
+          margin-bottom: 0.25em; /* 기존 0.5em → 줄임 */
+          line-height: 1.25;
         }
         .ProseMirror h2 {
           font-size: 1.5em;
           font-weight: bold;
-          margin-top: 1.25em;
-          margin-bottom: 0.5em;
+          margin-top: 0.7em;     /* 기존 1.25em → 줄임 */
+          margin-bottom: 0.25em;
           line-height: 1.3;
         }
         .ProseMirror h3 {
           font-size: 1.25em;
           font-weight: 600;
-          margin-top: 1em;
-          margin-bottom: 0.5em;
-          line-height: 1.4;
+          margin-top: 0.55em;     /* 기존 1em → 줄임 */
+          margin-bottom: 0.2em;
+          line-height: 1.35;
         }
         .ProseMirror p {
-          margin-bottom: 0.75em;
-          line-height: 1.6;
-          min-height: 1.5em;
+          margin: 0.15rem 0;      /* 기존 margin-bottom: 0.75em → 전체 간격 대폭 축소 */
+          line-height: 1.55;      /* 살짝 타이트하게 */
+          min-height: 1.4em;
         }
         /* 리스트 기본 스타일 재정의 */
         .ProseMirror ul,
@@ -752,13 +793,13 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           list-style: none;
         }
         .ProseMirror li {
-          margin: 0.5em 0;
+          margin: 0.1em 0;        /* 기존 0.5em → 많이 줄임 */
           /* ✅ 텍스트 기준으로 bullet만 살짝 안쪽으로 */
           padding-left: 1.5rem;
           position: relative;
           display: block;
           color: #171717;
-          min-height: 1.5em;
+          min-height: 1.4em;
           background-color: transparent;
         }
         /* 불릿 위치 (텍스트 기준) */
@@ -784,7 +825,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           font-weight: normal;
         }
         .ProseMirror li:hover {
-          background-color: #fafafa;
+          background-color: #fbfbfb; /* 기존 #fafafa → 아주 약간만 더 연하게 */
         }
         .ProseMirror code {
           background-color: #f4f4f5;
