@@ -618,6 +618,8 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
   const [previewDifficulty, setPreviewDifficulty] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -861,6 +863,50 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
     );
   };
 
+  const handleSubmit = async () => {
+    if (!detectedSite || !detectedProblemId || !problemLink.trim()) {
+      setSubmitError("필수 정보가 누락되었습니다.");
+      return;
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      setSubmitError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+      const response = await fetch(`${normalizedBaseUrl}/api/v1/problems`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          site: detectedSite,
+          siteProblemId: detectedProblemId,
+          title: previewTitle || null,
+          url: problemLink.trim(),
+          difficulty: previewDifficulty,
+          tagSlugs: selectedTerms,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`문제 등록에 실패했습니다. (status: ${response.status})`);
+      }
+
+      onClose();
+    } catch (fetchError) {
+      setSubmitError((fetchError as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
       <div
@@ -1044,20 +1090,37 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <footer className="flex justify-end gap-3 border-t border-zinc-200 px-6 py-5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
-          >
-            문제 추가 완료
-          </button>
+        <footer className="flex flex-col gap-3 border-t border-zinc-200 px-6 py-5">
+          {submitError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
+              <p className="font-medium">{submitError}</p>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting || !detectedSite || !detectedProblemId || !problemLink.trim()}
+              className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  등록 중...
+                </>
+              ) : (
+                "문제 추가 완료"
+              )}
+            </button>
+          </div>
         </footer>
       </div>
     </div>
