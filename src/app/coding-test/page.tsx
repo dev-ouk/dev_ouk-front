@@ -48,14 +48,32 @@ type ProblemPreview = {
   } | null;
 };
 
+type ProblemCandidate = {
+  site: string;
+  siteProblemId: string;
+  title: string;
+  difficulty: number | null;
+  lastAttempt: {
+    verdict: string;
+    attemptedAt: string;
+  } | null;
+};
+
+type ProblemCandidatesResponse = {
+  items: ProblemCandidate[];
+  size: number;
+  hasNext: boolean;
+  nextCursor: string | null;
+};
+
 const SITE_META: Record<string, SiteMeta> = {
   BAEKJOON: {
     name: "백준",
-    logoSrc: "/logos/baekjoon.svg",
+    logoSrc: "/logos/baekjoon.png",
   },
   PROGRAMMERS: {
     name: "프로그래머스",
-    logoSrc: "/logos/programmers.svg",
+    logoSrc: "/logos/programmers.png",
   },
 };
 
@@ -498,6 +516,148 @@ function AddProblemModal({
   onClose: () => void;
   onOpenDirectModal: () => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSites, setSelectedSites] = useState<string[]>([]);
+  const [candidates, setCandidates] = useState<ProblemCandidate[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasNext, setHasNext] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [selectedProblem, setSelectedProblem] = useState<ProblemCandidate | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const siteOptions = [
+    { key: "BAEKJOON", label: "백준" },
+    { key: "PROGRAMMERS", label: "프로그래머스" },
+  ];
+
+  const toggleSite = (siteKey: string) => {
+    setSelectedSites((prev) =>
+      prev.includes(siteKey) ? prev.filter((s) => s !== siteKey) : [...prev, siteKey],
+    );
+  };
+
+  const fetchCandidates = async (cursor?: string | null, append = false) => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      setError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+      const params = new URLSearchParams();
+
+      if (searchQuery.trim()) {
+        params.append("q", searchQuery.trim());
+      }
+
+      selectedSites.forEach((site) => {
+        params.append("sites", site);
+      });
+
+      params.append("size", "20");
+
+      if (cursor) {
+        params.append("cursor", cursor);
+      }
+
+      const response = await fetch(
+        `${normalizedBaseUrl}/api/v1/problem-candidates?${params.toString()}`,
+        {
+          method: "GET",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`문제 검색에 실패했습니다. (status: ${response.status})`);
+      }
+
+      const payload = (await response.json()) as ProblemCandidatesResponse;
+
+      if (append) {
+        setCandidates((prev) => [...prev, ...payload.items]);
+      } else {
+        setCandidates(payload.items);
+      }
+
+      setHasNext(payload.hasNext);
+      setNextCursor(payload.nextCursor);
+    } catch (fetchError) {
+      setError((fetchError as Error).message);
+      if (!append) {
+        setCandidates([]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchCandidates(null, false);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, selectedSites]);
+
+  const loadMore = () => {
+    if (nextCursor && !isLoading) {
+      fetchCandidates(nextCursor, true);
+    }
+  };
+
+  const handleSelectProblem = (problem: ProblemCandidate) => {
+    setSelectedProblem(problem);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedProblem) {
+      return;
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      setSubmitError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+      const response = await fetch(`${normalizedBaseUrl}/api/v1/problems`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          site: selectedProblem.site,
+          siteProblemId: selectedProblem.siteProblemId,
+          title: selectedProblem.title,
+          url: null,
+          difficulty: selectedProblem.difficulty,
+          tagSlugs: [],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`문제 등록에 실패했습니다. (status: ${response.status})`);
+      }
+
+      onClose();
+    } catch (fetchError) {
+      setSubmitError((fetchError as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
       <div
@@ -514,7 +674,7 @@ function AddProblemModal({
               문제 풀이 기록 추가
             </h2>
             <p className="mt-2 text-sm text-zinc-600">
-              사이트와 문제를 검색하여 기록을 추가할 수 있습니다. 지금은 UI만 준비되어 있어요.
+              사이트와 문제를 검색하여 기록을 추가할 수 있습니다.
             </p>
           </div>
           <button
@@ -534,13 +694,18 @@ function AddProblemModal({
                 사이트 선택
               </span>
               <div className="flex flex-wrap gap-2">
-                {["백준", "프로그래머스", "기타"].map((label) => (
+                {siteOptions.map((option) => (
                   <button
-                    key={label}
+                    key={option.key}
                     type="button"
-                    className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900"
+                    onClick={() => toggleSite(option.key)}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      selectedSites.includes(option.key)
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-900"
+                    }`}
                   >
-                    {label}
+                    {option.label}
                   </button>
                 ))}
               </div>
@@ -552,13 +717,114 @@ function AddProblemModal({
                 <input
                   type="search"
                   placeholder="문제 번호 또는 이름으로 검색하세요"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full border-none bg-transparent text-sm text-zinc-700 outline-none"
-                  disabled
                 />
               </label>
 
-              <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center text-sm text-zinc-500">
-                검색 결과는 이 영역에 표시됩니다. API 연동 전이라 아직 비어 있습니다.
+              <div className="min-h-[200px] max-h-[400px] overflow-y-auto rounded-lg border border-zinc-200 bg-white">
+                {isLoading && candidates.length === 0 ? (
+                  <div className="flex h-48 items-center justify-center text-sm text-zinc-500">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    검색 중...
+                  </div>
+                ) : error ? (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+                    {error}
+                  </div>
+                ) : candidates.length === 0 ? (
+                  <div className="flex h-48 items-center justify-center text-sm text-zinc-500">
+                    검색 결과가 없습니다.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-100">
+                    {candidates.map((candidate, index) => (
+                      <button
+                        key={`${candidate.site}-${candidate.siteProblemId}-${index}`}
+                        type="button"
+                        onClick={() => handleSelectProblem(candidate)}
+                        className={`w-full px-4 py-3 text-left transition ${
+                          selectedProblem?.site === candidate.site &&
+                          selectedProblem?.siteProblemId === candidate.siteProblemId
+                            ? "bg-zinc-100"
+                            : "hover:bg-zinc-50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs text-zinc-500">
+                                {candidate.siteProblemId}
+                              </span>
+                              <span className="text-sm font-medium text-zinc-900">
+                                {candidate.title}
+                              </span>
+                            </div>
+                            {candidate.lastAttempt && (() => {
+                              const verdictDisplay = getVerdictDisplay(candidate.lastAttempt.verdict);
+                              const Icon = verdictDisplay.icon;
+                              return (
+                                <div className="mt-1 flex items-center gap-2">
+                                  <Icon
+                                    className={`h-3 w-3 ${verdictDisplay.className}`}
+                                    aria-hidden="true"
+                                  />
+                                  <span className="text-xs text-zinc-500">
+                                    {verdictDisplay.label} ·{" "}
+                                    {formatAttemptedAt(candidate.lastAttempt.attemptedAt)}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          {candidate.difficulty != null && (
+                            <div className="ml-2">
+                              {candidate.site === "BAEKJOON" ? (
+                                <Image
+                                  src={`https://static.solved.ac/tier_small/${candidate.difficulty}.svg`}
+                                  alt="난이도"
+                                  width={24}
+                                  height={24}
+                                  className="h-6 w-6"
+                                  unoptimized
+                                />
+                              ) : (
+                                <span
+                                  className="inline-flex items-center rounded-full border border-current px-2 py-0.5 text-xs font-semibold uppercase"
+                                  style={{
+                                    color:
+                                      PROGRAMMERS_LEVEL_COLORS[candidate.difficulty] ?? "#1bbaff",
+                                  }}
+                                >
+                                  Lv. {candidate.difficulty}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {hasNext && !isLoading && (
+                  <div className="border-t border-zinc-200 p-4">
+                    <button
+                      type="button"
+                      onClick={loadMore}
+                      disabled={isLoading}
+                      className="w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      더 보기
+                    </button>
+                  </div>
+                )}
+                {isLoading && candidates.length > 0 && (
+                  <div className="flex items-center justify-center border-t border-zinc-200 p-4 text-sm text-zinc-500">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    불러오는 중...
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -567,16 +833,81 @@ function AddProblemModal({
             <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
               선택한 문제
             </span>
-            <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-5 text-sm text-zinc-500">
-              아직 선택된 문제가 없습니다. 검색 결과에서 문제를 선택하면 상세 정보가 여기에 표시됩니다.
-            </div>
+            {selectedProblem ? (
+              <div className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-zinc-500">
+                      {selectedProblem.siteProblemId}
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-900">
+                      {selectedProblem.title}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <SiteCell site={selectedProblem.site} />
+                  </div>
+                  {selectedProblem.difficulty != null && (
+                    <div className="mt-2">
+                      {selectedProblem.site === "BAEKJOON" ? (
+                        <Image
+                          src={`https://static.solved.ac/tier_small/${selectedProblem.difficulty}.svg`}
+                          alt="난이도"
+                          width={32}
+                          height={32}
+                          className="h-8 w-8"
+                          unoptimized
+                        />
+                      ) : (
+                        <span
+                          className="inline-flex items-center rounded-full border border-current px-3 py-1 text-xs font-semibold uppercase"
+                          style={{
+                            color:
+                              PROGRAMMERS_LEVEL_COLORS[selectedProblem.difficulty] ?? "#1bbaff",
+                          }}
+                        >
+                          Lv. {selectedProblem.difficulty}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {selectedProblem.lastAttempt && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <StatusCell verdict={selectedProblem.lastAttempt.verdict} />
+                      <span className="text-xs text-zinc-500">
+                        {formatAttemptedAt(selectedProblem.lastAttempt.attemptedAt)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-5 text-sm text-zinc-500">
+                아직 선택된 문제가 없습니다. 검색 결과에서 문제를 선택하면 상세 정보가 여기에
+                표시됩니다.
+              </div>
+            )}
+
+            {submitError && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
+                {submitError}
+              </div>
+            )}
 
             <button
               type="button"
+              onClick={handleSubmit}
+              disabled={!selectedProblem || isSubmitting}
               className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
-              disabled
             >
-              선택한 문제 추가
+              {isSubmitting ? (
+                <span className="inline-flex items-center">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  등록 중...
+                </span>
+              ) : (
+                "선택한 문제 추가"
+              )}
             </button>
 
             <button
@@ -1025,7 +1356,7 @@ function DirectAddModal({ onClose }: { onClose: () => void }) {
                   />
                 </label>
 
-                <div className="min-h-[140px] rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4">
+                <div className="min-h-[100px] max-h-[100px] overflow-y-auto rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4">
                   {isLoadingTerms ? (
                     <div className="flex h-full items-center justify-center text-sm text-zinc-500">
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
