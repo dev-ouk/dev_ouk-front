@@ -834,33 +834,64 @@ function AddProblemModal({
               선택한 문제
             </span>
             {selectedProblem ? (
-              <div className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-zinc-500">
-                      {selectedProblem.siteProblemId}
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900">
-                      {selectedProblem.title}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <SiteCell site={selectedProblem.site} />
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const meta = getSiteMeta(selectedProblem.site);
+                        return meta.logoSrc ? (
+                          <Image
+                            src={meta.logoSrc}
+                            alt={`${meta.name} 로고`}
+                            width={20}
+                            height={20}
+                            className="h-5 w-5 rounded"
+                          />
+                        ) : (
+                          <div className="flex h-5 w-5 items-center justify-center rounded bg-zinc-200 text-xs font-semibold text-zinc-600">
+                            {selectedProblem.site?.[0]?.toUpperCase() ?? "?"}
+                          </div>
+                        );
+                      })()}
+                      <span className="font-mono text-xs text-zinc-500">
+                        {selectedProblem.siteProblemId}
+                      </span>
+                      <span className="text-sm font-medium text-zinc-900">
+                        {selectedProblem.title}
+                      </span>
+                    </div>
+                    {selectedProblem.lastAttempt && (() => {
+                      const verdictDisplay = getVerdictDisplay(selectedProblem.lastAttempt.verdict);
+                      const Icon = verdictDisplay.icon;
+                      return (
+                        <div className="mt-1 flex items-center gap-2">
+                          <Icon
+                            className={`h-3 w-3 ${verdictDisplay.className}`}
+                            aria-hidden="true"
+                          />
+                          <span className="text-xs text-zinc-500">
+                            {verdictDisplay.label} ·{" "}
+                            {formatAttemptedAt(selectedProblem.lastAttempt.attemptedAt)}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                   {selectedProblem.difficulty != null && (
-                    <div className="mt-2">
+                    <div className="ml-2">
                       {selectedProblem.site === "BAEKJOON" ? (
                         <Image
                           src={`https://static.solved.ac/tier_small/${selectedProblem.difficulty}.svg`}
                           alt="난이도"
-                          width={32}
-                          height={32}
-                          className="h-8 w-8"
+                          width={24}
+                          height={24}
+                          className="h-6 w-6"
                           unoptimized
                         />
                       ) : (
                         <span
-                          className="inline-flex items-center rounded-full border border-current px-3 py-1 text-xs font-semibold uppercase"
+                          className="inline-flex items-center rounded-full border border-current px-2 py-0.5 text-xs font-semibold uppercase"
                           style={{
                             color:
                               PROGRAMMERS_LEVEL_COLORS[selectedProblem.difficulty] ?? "#1bbaff",
@@ -869,14 +900,6 @@ function AddProblemModal({
                           Lv. {selectedProblem.difficulty}
                         </span>
                       )}
-                    </div>
-                  )}
-                  {selectedProblem.lastAttempt && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <StatusCell verdict={selectedProblem.lastAttempt.verdict} />
-                      <span className="text-xs text-zinc-500">
-                        {formatAttemptedAt(selectedProblem.lastAttempt.attemptedAt)}
-                      </span>
                     </div>
                   )}
                 </div>
