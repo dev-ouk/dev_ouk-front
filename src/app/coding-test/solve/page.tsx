@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import { SidebarLayout } from "../../_components/sidebar-layout";
 
 type SearchParams = {
@@ -11,6 +11,8 @@ type SearchParams = {
   siteProblemId?: string;
   title?: string;
   difficulty?: string;
+  verdict?: string;
+  attemptedAt?: string;
 };
 
 const SITE_META: Record<
@@ -38,6 +40,29 @@ function getMeta(site?: string) {
   return SITE_META[key ?? ""] ?? { name: site ?? "-", logoSrc: "" };
 }
 
+function formatAttemptedAt(dateString?: string | null) {
+  if (!dateString) return "-";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(date)
+    .replace(/\s/g, "")
+    .replace(/\.$/, "");
+}
+
+function getVerdictDisplay(verdict?: string | null) {
+  const normalized = verdict?.toUpperCase();
+  const isAccepted = normalized === "AC";
+  if (isAccepted) {
+    return { label: "성공", className: "text-emerald-600", Icon: CheckCircle2 };
+  }
+  return { label: "실패", className: "text-rose-500", Icon: XCircle };
+}
+
 export default function SolvePage({
   searchParams,
 }: {
@@ -54,6 +79,10 @@ export default function SolvePage({
       siteProblemId: searchParams.siteProblemId ?? "1000",
       title: searchParams.title ?? "A+B",
       difficulty,
+      lastAttempt: {
+        verdict: searchParams.verdict ?? "AC",
+        attemptedAt: searchParams.attemptedAt ?? "2025-12-05T13:45:00Z",
+      },
     };
   }, [searchParams]);
 
@@ -119,6 +148,23 @@ export default function SolvePage({
                 </>
               )}
             </div>
+            {data.lastAttempt && (() => {
+              const verdictDisplay = getVerdictDisplay(data.lastAttempt.verdict);
+              const Icon = verdictDisplay.Icon;
+              return (
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 font-semibold ${verdictDisplay.className}`}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {verdictDisplay.label}
+                  </span>
+                  <span className="text-[11px] text-zinc-500">
+                    최근 시도: {formatAttemptedAt(data.lastAttempt.attemptedAt)}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
