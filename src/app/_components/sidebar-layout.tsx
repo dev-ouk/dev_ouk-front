@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useState } from "react";
-import {ChevronLeft, ChevronRight, Code2, Home, LucideIcon, Menu} from "lucide-react";
+import {ChevronLeft, ChevronRight, Code2, Dumbbell, Home, LucideIcon, Menu} from "lucide-react";
 
 type NavItem = {
   id: string;
@@ -24,6 +24,12 @@ const navItems: NavItem[] = [
     label: "Coding Test",
     icon: Code2,
     href: "/coding-test",
+  },
+  {
+    id: "workout",
+    label: "Workout",
+    icon: Dumbbell,
+    href: "/workout",
   },
 ];
 
