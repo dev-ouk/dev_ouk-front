@@ -510,6 +510,7 @@ function AddProblemModal({
   onClose: () => void;
   onOpenDirectModal: () => void;
 }) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
   const [candidates, setCandidates] = useState<ProblemCandidate[]>([]);
@@ -614,36 +615,21 @@ function AddProblemModal({
       return;
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!baseUrl) {
-      setSubmitError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       setSubmitError(null);
 
-      const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
-      const response = await fetch(`${normalizedBaseUrl}/api/v1/problems`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          site: selectedProblem.site,
-          siteProblemId: selectedProblem.siteProblemId,
-          title: selectedProblem.title,
-          url: null,
-          difficulty: selectedProblem.difficulty,
-          tagSlugs: [],
-        }),
+      const params = new URLSearchParams({
+        site: selectedProblem.site,
+        siteProblemId: selectedProblem.siteProblemId,
+        title: selectedProblem.title,
       });
 
-      if (!response.ok) {
-        throw new Error(`문제 등록에 실패했습니다. (status: ${response.status})`);
+      if (selectedProblem.difficulty != null) {
+        params.set("difficulty", String(selectedProblem.difficulty));
       }
 
+      router.push(`/coding-test/solve?${params.toString()}`);
       onClose();
     } catch (fetchError) {
       setSubmitError((fetchError as Error).message);
