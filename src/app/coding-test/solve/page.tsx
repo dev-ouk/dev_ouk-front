@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import { SidebarLayout } from "../../_components/sidebar-layout";
 
@@ -68,6 +68,8 @@ export default function SolvePage({
 }: {
   searchParams: SearchParams;
 }) {
+  const [activeTab, setActiveTab] = useState(0);
+
   const data = useMemo(() => {
     const parsedDifficulty = searchParams.difficulty ? Number(searchParams.difficulty) : null;
     const difficulty =
@@ -85,6 +87,13 @@ export default function SolvePage({
       },
     };
   }, [searchParams]);
+
+  // API 연동 전: 최근 시도/상태 탭용 가짜 데이터
+  const attempts = [
+    { title: "12월 5일 시도", verdict: "AC", attemptedAt: "2025-12-05T13:45:00Z" },
+    { title: "12월 4일 시도", verdict: "WA", attemptedAt: "2025-12-04T21:10:00Z" },
+    { title: "12월 1일 시도", verdict: "WA", attemptedAt: "2025-12-01T09:05:00Z" },
+  ];
 
   const meta = getMeta(data.site);
 
@@ -163,6 +172,50 @@ export default function SolvePage({
                     최근 시도: {formatAttemptedAt(data.lastAttempt.attemptedAt)}
                   </span>
                 </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap gap-2 border-b border-zinc-200 pb-3">
+            {attempts.map((attempt, idx) => {
+              const { label, className } = getVerdictDisplay(attempt.verdict);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveTab(idx)}
+                  className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
+                    activeTab === idx
+                      ? "bg-zinc-900 text-white"
+                      : "border border-zinc-200 text-zinc-700 hover:border-zinc-300"
+                  }`}
+                >
+                  {attempt.title} <span className={className}>· {label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {(() => {
+              const attempt = attempts[activeTab] ?? attempts[0];
+              const verdictDisplay = getVerdictDisplay(attempt.verdict);
+              const Icon = verdictDisplay.Icon;
+              return (
+                <>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Icon className={`h-4 w-4 ${verdictDisplay.className}`} aria-hidden="true" />
+                    <span className="font-semibold text-zinc-900">{attempt.title}</span>
+                    <span className="text-xs text-zinc-500">
+                      최근 시도: {formatAttemptedAt(attempt.attemptedAt)}
+                    </span>
+                  </div>
+                  <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3 text-sm text-zinc-600">
+                    탭별 상세 내용이 들어갈 자리입니다. (API 연동 시 채워짐)
+                  </p>
+                </>
               );
             })()}
           </div>
