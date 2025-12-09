@@ -8,6 +8,17 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { SidebarLayout } from "../../_components/sidebar-layout";
 import { useSearchParams } from "next/navigation";
+import Editor from "react-simple-code-editor";
+import Prism from "prismjs";
+import "prismjs/components/prism-java";
+import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-python";
+import "prismjs/components/prism-c";
+import "prismjs/components/prism-cpp";
+import "prismjs/components/prism-csharp";
+import "prismjs/components/prism-go";
+import "prismjs/components/prism-kotlin";
 
 type SearchParams = {
   site?: string;
@@ -94,10 +105,32 @@ function getVerdictDisplay(verdict?: string | null) {
   }
 }
 
+const LANGUAGE_MAP: Record<string, string> = {
+  java: "java",
+  javascript: "javascript",
+  typescript: "typescript",
+  python: "python",
+  "c++": "cpp",
+  c: "c",
+  cpp: "cpp",
+  "c#": "csharp",
+  csharp: "csharp",
+  go: "go",
+  golang: "go",
+  kotlin: "kotlin",
+};
+
+function getPrismLanguage(lang?: string) {
+  if (!lang) return "text";
+  const key = lang.toLowerCase();
+  return LANGUAGE_MAP[key] ?? "text";
+}
+
 export default function SolvePage() {
   const [activeTab, setActiveTab] = useState(0);
   const [draft, setDraft] = useState<Attempt | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const searchParams = useSearchParams();
 
   const data = useMemo(() => {
@@ -265,6 +298,10 @@ class Main {
       setActiveTab(Math.max(0, displayLength - 1));
     }
   }, [activeTab, attempts.length, draft, isEditing]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const getAttemptTitle = (attempt: Attempt) => {
     const label = formatAttemptedAt(attempt.attemptedAt);
@@ -471,25 +508,35 @@ class Main {
                     </div>
 
                     <div className="space-y-3 pt-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-zinc-600">풀이 정리</label>
-                        <textarea
-                          value={draft.summary}
-                          onChange={(e) => handleDraftChange("summary", e.target.value)}
-                          rows={4}
-                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                        />
-                      </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-zinc-600">풀이 정리</label>
+                <textarea
+                  value={draft.summary}
+                  onChange={(e) => handleDraftChange("summary", e.target.value)}
+                  rows={4}
+                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                />
+              </div>
 
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-zinc-600">코드</label>
-                        <textarea
-                          value={draft.code ?? ""}
-                          onChange={(e) => handleDraftChange("code", e.target.value)}
-                          rows={6}
-                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 font-mono text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                        />
-                      </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-zinc-600">코드</label>
+                <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[#282c34]">
+                  <Editor
+                    value={draft.code ?? ""}
+                    onValueChange={(code) => handleDraftChange("code", code)}
+                    highlight={(code) =>
+                      Prism.highlight(
+                        code,
+                        Prism.languages[getPrismLanguage(draft.language)] ?? Prism.languages.text,
+                        getPrismLanguage(draft.language),
+                      )
+                    }
+                    padding={12}
+                    textareaClassName="font-mono text-sm leading-6 text-white outline-none"
+                    className="min-h-[180px] bg-[#282c34] font-mono text-sm text-white"
+                  />
+                </div>
+              </div>
 
                       {draft.verdict !== "AC" ? (
                         <>
@@ -596,20 +643,25 @@ class Main {
                       <Code2 className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                       코드
                     </div>
-                    <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                      <SyntaxHighlighter
-                        language={(attempt.language ?? "text").toLowerCase()}
-                        style={oneDark}
-                        customStyle={{
-                          margin: 0,
-                          borderRadius: "0.75rem",
-                          fontSize: "12px",
-                          lineHeight: "1.6",
-                        }}
-                        showLineNumbers
-                      >
+                    <div className="overflow-x-auto rounded-lg border border-zinc-700 bg-[#282c34]">
+                      {mounted ? (
+                        <SyntaxHighlighter
+                          language={getPrismLanguage(attempt.language)}
+                          style={oneDark}
+                          customStyle={{
+                            margin: 0,
+                            fontSize: "12px",
+                            lineHeight: "1.6",
+                            background: "#282c34",
+                          }}
+                        >
 {attempt.code}
-                      </SyntaxHighlighter>
+                        </SyntaxHighlighter>
+                      ) : (
+                        <pre className="whitespace-pre bg-[#282c34] px-3 py-2 text-xs text-white">
+{attempt.code}
+                        </pre>
+                      )}
                     </div>
                   </div>
 

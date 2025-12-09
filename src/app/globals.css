@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "prism-themes/themes/prism-one-dark.css";
 
 :root {
   --background: #ffffff;
