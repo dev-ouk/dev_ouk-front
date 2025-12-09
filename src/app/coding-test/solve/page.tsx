@@ -19,7 +19,6 @@ type SearchParams = {
 };
 
 type Attempt = {
-  title: string;
   verdict: string;
   attemptedAt: string;
   duration: string;
@@ -125,7 +124,6 @@ export default function SolvePage() {
   // API 연동 전: 최근 시도/상태 탭용 가짜 데이터
   const [attempts, setAttempts] = useState<Attempt[]>([
     {
-      title: "12월 5일 시도",
       verdict: "AC",
       attemptedAt: "2025-12-05T13:45:00Z",
       duration: "18분",
@@ -173,7 +171,6 @@ class Main {
       nextReview: "2025-12-12",
     },
     {
-      title: "12월 4일 시도",
       verdict: "WA",
       attemptedAt: "2025-12-04T21:10:00Z",
       duration: "25분",
@@ -195,7 +192,6 @@ class Main {
       nextReview: "2025-12-10",
     },
     {
-      title: "12월 1일 시도",
       verdict: "TLE",
       attemptedAt: "2025-12-01T09:05:00Z",
       duration: "40분",
@@ -221,20 +217,19 @@ class Main {
   const handleAddAttempt = () => {
     const now = new Date();
     const iso = now.toISOString();
-    const label = formatAttemptedAt(iso);
+    const dateOnly = iso.split("T")[0];
 
     const newDraft: Attempt = {
-      title: `${label} 시도`,
       verdict: "AC",
-      attemptedAt: iso,
-      duration: "10분",
+      attemptedAt: dateOnly,
+      duration: "10",
       language: "Java",
       summary: "",
       code: "",
       failureCategory: "",
       failureReason: "",
       learnings: "",
-      nextReview: label,
+      nextReview: dateOnly,
     };
 
     setDraft(newDraft);
@@ -270,6 +265,11 @@ class Main {
       setActiveTab(Math.max(0, displayLength - 1));
     }
   }, [activeTab, attempts.length, draft, isEditing]);
+
+  const getAttemptTitle = (attempt: Attempt) => {
+    const label = formatAttemptedAt(attempt.attemptedAt);
+    return `${label} 시도`;
+  };
 
   const meta = getMeta(data.site);
 
@@ -370,7 +370,8 @@ class Main {
                         : "border border-zinc-200 text-zinc-700 hover:border-zinc-300"
                     }`}
                   >
-                    {isDraftTab ? "새 시도 (편집중)" : attempt.title} <span className={className}>· {label}</span>
+                    {isDraftTab ? "새 시도 (편집중)" : getAttemptTitle(attempt)}{" "}
+                    <span className={className}>· {label}</span>
                   </button>
                 );
               })}
@@ -418,18 +419,9 @@ class Main {
 
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold text-zinc-600">제목</label>
-                        <input
-                          type="text"
-                          value={draft.title}
-                          onChange={(e) => handleDraftChange("title", e.target.value)}
-                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                        />
-                      </div>
-                      <div className="space-y-1">
                         <label className="text-xs font-semibold text-zinc-600">시도 일시</label>
                         <input
-                          type="text"
+                          type="date"
                           value={draft.attemptedAt}
                           onChange={(e) => handleDraftChange("attemptedAt", e.target.value)}
                           className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
@@ -438,7 +430,9 @@ class Main {
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-zinc-600">풀이 시간</label>
                         <input
-                          type="text"
+                          type="number"
+                          min={0}
+                          step={1}
                           value={draft.duration}
                           onChange={(e) => handleDraftChange("duration", e.target.value)}
                           className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
@@ -446,12 +440,19 @@ class Main {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-zinc-600">사용 언어</label>
-                        <input
-                          type="text"
+                        <select
                           value={draft.language}
                           onChange={(e) => handleDraftChange("language", e.target.value)}
                           className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                        />
+                        >
+                          {["Java", "JavaScript", "TypeScript", "Python", "C++", "Go", "Kotlin", "C#"].map(
+                            (lang) => (
+                              <option key={lang} value={lang}>
+                                {lang}
+                              </option>
+                            ),
+                          )}
+                        </select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-zinc-600">시도 결과</label>
