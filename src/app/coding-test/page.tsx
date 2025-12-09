@@ -3,13 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import {
-  CheckCircle2,
-  Loader2,
-  Search,
-  X,
-  XCircle,
-} from "lucide-react";
+import { Check, CheckCircle2, Loader2, Search, X, XCircle } from "lucide-react";
 import { SidebarLayout } from "../_components/sidebar-layout";
 
 type Problem = {
@@ -778,30 +772,36 @@ function AddProblemModal({
                               );
                             })()}
                           </div>
-                          {candidate.difficulty != null && (
-                            <div className="ml-2">
-                              {candidate.site === "BAEKJOON" ? (
-                                <Image
-                                  src={`https://static.solved.ac/tier_small/${candidate.difficulty}.svg`}
-                                  alt="난이도"
-                                  width={24}
-                                  height={24}
-                                  className="h-6 w-6"
-                                  unoptimized
-                                />
-                              ) : (
-                                <span
-                                  className="inline-flex items-center rounded-full border border-current px-2 py-0.5 text-xs font-semibold uppercase"
-                                  style={{
-                                    color:
-                                      PROGRAMMERS_LEVEL_COLORS[candidate.difficulty] ?? "#1bbaff",
-                                  }}
-                                >
-                                  Lv. {candidate.difficulty}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          <div className="ml-2 flex items-center gap-2">
+                            {selectedProblem?.site === candidate.site &&
+                              selectedProblem?.siteProblemId === candidate.siteProblemId ? (
+                              <Check className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+                            ) : null}
+                            {candidate.difficulty != null && (
+                              <div>
+                                {candidate.site === "BAEKJOON" ? (
+                                  <Image
+                                    src={`https://static.solved.ac/tier_small/${candidate.difficulty}.svg`}
+                                    alt="난이도"
+                                    width={24}
+                                    height={24}
+                                    className="h-6 w-6"
+                                    unoptimized
+                                  />
+                                ) : (
+                                  <span
+                                    className="inline-flex items-center rounded-full border border-current px-2 py-0.5 text-xs font-semibold uppercase"
+                                    style={{
+                                      color:
+                                        PROGRAMMERS_LEVEL_COLORS[candidate.difficulty] ?? "#1bbaff",
+                                    }}
+                                  >
+                                    Lv. {candidate.difficulty}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </button>
                     ))}
@@ -929,7 +929,7 @@ function AddProblemModal({
                   등록 중...
                 </span>
               ) : (
-                "선택한 문제 추가"
+                "이 문제 풀이 등록하기"
               )}
             </button>
 
