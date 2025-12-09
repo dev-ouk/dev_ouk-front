@@ -114,7 +114,11 @@ export default function SolvePage({
       duration: "18분",
       language: "Java",
       summary:
-        "DFS/백트래킹으로 한 줄에 퀸 하나만 두고, 대각선 충돌만 검사하는 방식으로 통과.",
+        "DFS/백트래킹으로 한 줄에 퀸 하나만 두고, 대각선 충돌만 검사하는 방식으로 통과했다. " +
+        "행·열을 비트마스크로 관리해서 분기를 줄였고, 대각선은 이전 행만 비교해도 충분했다. " +
+        "중간에 방문 배열을 잘못 초기화해서 한 번 TLE가 났지만, 범위 줄이기로 해결했다. " +
+        "테스트 데이터가 작다고 방심하지 말고 최악 케이스를 항상 염두에 둬야 한다. " +
+        "시간 복잡도와 가지치기 조건을 먼저 적어두면 구현 실수가 크게 줄어든다.",
       code: `import java.util.*;
 import java.io.*;
 
@@ -144,7 +148,11 @@ class Main {
         }
     }
 }`,
-      learnings: "대각선만 빠르게 체크하면 된다. 비트마스크로 열 방문을 관리하면 속도가 잘 나온다.",
+      learnings:
+        "대각선 충돌만 체크해도 충분하다는 점을 수식으로 먼저 확인하자. " +
+        "비트마스크로 열을 관리하면 O(1)로 열 충돌을 확인할 수 있어 분기 수가 확 줄었다. " +
+        "중간 상태를 프린트해서 디버깅하는 대신, 조건을 표로 정리하고 놓친 케이스를 체크리스트로 관리하니 더 빨랐다. " +
+        "다음에는 실패 케이스를 먼저 적고, 그걸 막는 조건을 코드로 옮기는 습관을 들이겠다.",
       nextReview: "2025-12-12",
     },
     {
@@ -153,11 +161,20 @@ class Main {
       attemptedAt: "2025-12-04T21:10:00Z",
       duration: "25분",
       language: "Java",
-      summary: "대각선 체크를 빼먹어 일부 케이스에서 충돌을 놓침.",
+      summary:
+        "대각선 체크를 빼먹어 일부 케이스에서 충돌을 놓쳤다. " +
+        "행/열만 검사하면 충분하다고 착각한 게 원인이었다. " +
+        "테스트를 몇 개만 돌려보고 통과했다고 판단한 것이 치명적이었다. " +
+        "체크리스트 없이 구현하면 제약을 하나씩 빼먹기 쉽다는 것을 다시 느꼈다. " +
+        "최소한의 반례라도 직접 만들어 보는 습관이 필요하다.",
       code: "// 대각선 체크 누락 버전",
       failureCategory: "Correctness",
       failureReason: "대각선 충돌 로직을 넣지 않아 오답.",
-      learnings: "체크 리스트를 먼저 적고, 필수 제약(행/열/대각선)을 모두 반영했는지 검증한다.",
+      learnings:
+        "필수 제약(행/열/대각선)을 먼저 종이에 적고, 구현 후 하나씩 체크해 보자. " +
+        "반례를 직접 만들고, 그 반례가 통과하는지 확인하는 과정을 빼먹지 않는다. " +
+        "테스트를 짧게 끝내지 말고, 실패한 케이스를 기록해 두면 다음 번에 같은 실수를 줄일 수 있다. " +
+        "디버깅 시에는 로그 대신 제약 조건 목록과 실제 코드 흐름을 나란히 보며 차이를 찾는 것이 효과적이었다.",
       nextReview: "2025-12-10",
     },
     {
@@ -166,11 +183,20 @@ class Main {
       attemptedAt: "2025-12-01T09:05:00Z",
       duration: "40분",
       language: "Java",
-      summary: "모든 칸을 다 돌며 백트래킹을 돌려서 시간 초과.",
+      summary:
+        "모든 칸을 다 돌며 백트래킹을 돌려서 시간 초과가 났다. " +
+        "가지치기 전에 하위 분기를 전부 확장해버려 연산량이 폭증했다. " +
+        "열/대각선 체크를 뒤늦게 넣어도 이미 쌓인 재귀 깊이 때문에 효과가 없었다. " +
+        "입력 크기가 커질 때의 연산량을 대략 계산하지 않고 구현부터 한 것이 문제였다. " +
+        "최악 복잡도를 추정해보고, 줄일 수 있는 제약을 먼저 반영해야 한다.",
       code: "// 전체 탐색으로 인한 TLE",
       failureCategory: "Performance",
       failureReason: "불필요한 완전 탐색으로 가지치기 부족.",
-      learnings: "가로/세로/대각선 제약을 조기에 체크해 분기 줄이기.",
+      learnings:
+        "가지치기 조건을 초기에 넣지 않으면 재귀 깊이가 걷잡을 수 없게 커진다. " +
+        "연산량이 의심되면 먼저 최악 복잡도를 적고, 줄일 수 있는 제약을 모두 열거한 뒤 코드에 반영하자. " +
+        "무조건 전체 탐색을 시도하기보다, 배제할 수 있는 상태를 더 일찍 제거하는 순서를 고민하는 게 중요하다. " +
+        "다음에는 구현 전에 상태·제약·복잡도를 체크리스트로 작성한 뒤 진행하기.",
       nextReview: "2025-12-08",
     },
   ];
@@ -296,23 +322,23 @@ class Main {
                   </div>
 
                   <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="text-sm font-semibold text-zinc-800">시도 결과</div>
+                    <div className="text-base font-semibold text-zinc-800">시도 결과</div>
                     <div className={`text-sm font-semibold ${verdictDisplay.className}`}>
                       {verdictDisplay.label} ({attempt.verdict})
                     </div>
                   </div>
 
                   <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="text-sm font-semibold text-zinc-800">풀이 정리</div>
-                    <p className="text-sm text-zinc-700">{attempt.summary}</p>
+                    <div className="text-base font-semibold text-zinc-800">풀이 정리</div>
+                    <p className="text-sm leading-relaxed text-zinc-700">{attempt.summary}</p>
                   </div>
 
                   <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-800">
+                    <div className="flex items-center gap-2 text-base font-semibold text-zinc-800">
                       <Code2 className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                       코드
                     </div>
-                    <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                    <div className="max-h-96 overflow-auto rounded-lg border border-zinc-200">
                       <SyntaxHighlighter
                         language={(attempt.language ?? "text").toLowerCase()}
                         style={oneDark}
@@ -333,19 +359,37 @@ class Main {
                     attempt.failureReason ||
                     attempt.learnings ||
                     attempt.nextReview) && (
-                    <div className="space-y-2 rounded-lg border border-rose-100 bg-rose-50 p-3">
-                      <div className="text-sm font-semibold text-rose-600">실패/교훈 메모</div>
+                    <div className="space-y-3 rounded-lg border border-rose-100 bg-rose-50 p-3">
+                      <div className="text-base font-semibold text-rose-600">실패/교훈 메모</div>
                       {attempt.failureCategory && (
-                        <div className="text-sm text-rose-700">실패 원인 분류: {attempt.failureCategory}</div>
+                        <div className="space-y-1 border-t border-rose-100 pt-2">
+                          <div className="text-sm font-semibold text-rose-700">실패 원인 분류</div>
+                          <div className="text-sm leading-relaxed text-rose-700">
+                            {attempt.failureCategory}
+                          </div>
+                        </div>
                       )}
                       {attempt.failureReason && (
-                        <div className="text-sm text-rose-700">구체적 원인: {attempt.failureReason}</div>
+                        <div className="space-y-1 border-t border-rose-100 pt-2">
+                          <div className="text-sm font-semibold text-rose-700">구체적 원인</div>
+                          <div className="text-sm leading-relaxed text-rose-700">
+                            {attempt.failureReason}
+                          </div>
+                        </div>
                       )}
                       {attempt.learnings && (
-                        <div className="text-sm text-rose-700">해결과정/배운점: {attempt.learnings}</div>
+                        <div className="space-y-1 border-t border-rose-100 pt-2">
+                          <div className="text-sm font-semibold text-rose-700">해결과정/배운점</div>
+                          <div className="text-sm leading-relaxed text-rose-700">
+                            {attempt.learnings}
+                          </div>
+                        </div>
                       )}
                       {attempt.nextReview && (
-                        <div className="text-sm text-rose-700">다음 복습 예정일: {attempt.nextReview}</div>
+                        <div className="space-y-1 border-t border-rose-100 pt-2">
+                          <div className="text-sm font-semibold text-rose-700">다음 복습 예정일</div>
+                          <div className="text-sm font-semibold text-rose-700">{attempt.nextReview}</div>
+                        </div>
                       )}
                     </div>
                   )}
