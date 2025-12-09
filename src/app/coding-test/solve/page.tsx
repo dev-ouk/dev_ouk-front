@@ -312,7 +312,7 @@ class Main {
                       <Code2 className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                       코드
                     </div>
-                    <div className="max-h-96 overflow-auto rounded-lg border border-zinc-200">
+                    <div className="overflow-x-auto rounded-lg border border-zinc-200">
                       <SyntaxHighlighter
                         language={(attempt.language ?? "text").toLowerCase()}
                         style={oneDark}
