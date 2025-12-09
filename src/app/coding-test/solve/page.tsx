@@ -468,15 +468,6 @@ class Main {
                           ))}
                         </select>
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-zinc-600">복습 예정일</label>
-                        <input
-                          type="text"
-                          value={draft.nextReview ?? ""}
-                          onChange={(e) => handleDraftChange("nextReview", e.target.value)}
-                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                        />
-                      </div>
                     </div>
 
                     <div className="space-y-3 pt-3">
@@ -500,36 +491,58 @@ class Main {
                         />
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-xs font-semibold text-zinc-600">실패 원인 분류</label>
-                          <input
-                            type="text"
-                            value={draft.failureCategory ?? ""}
-                            onChange={(e) => handleDraftChange("failureCategory", e.target.value)}
-                            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-semibold text-zinc-600">구체적 원인</label>
-                          <input
-                            type="text"
-                            value={draft.failureReason ?? ""}
-                            onChange={(e) => handleDraftChange("failureReason", e.target.value)}
-                            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                          />
-                        </div>
-                      </div>
+                      {draft.verdict !== "AC" ? (
+                        <>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-zinc-600">실패 원인 분류</label>
+                              <select
+                                value={draft.failureCategory ?? ""}
+                                onChange={(e) => handleDraftChange("failureCategory", e.target.value)}
+                                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                              >
+                                <option value="">선택</option>
+                                {["IMPLEMENTATION", "ALGORITHM", "EDGE_CASE", "PERFORMANCE", "CARELESS", "OTHER"].map(
+                                  (item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ),
+                                )}
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-zinc-600">구체적 원인</label>
+                              <input
+                                type="text"
+                                value={draft.failureReason ?? ""}
+                                onChange={(e) => handleDraftChange("failureReason", e.target.value)}
+                                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                              />
+                            </div>
+                          </div>
 
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold text-zinc-600">해결과정/배운점</label>
-                        <textarea
-                          value={draft.learnings ?? ""}
-                          onChange={(e) => handleDraftChange("learnings", e.target.value)}
-                          rows={4}
-                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
-                        />
-                      </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-zinc-600">해결과정/배운점</label>
+                            <textarea
+                              value={draft.learnings ?? ""}
+                              onChange={(e) => handleDraftChange("learnings", e.target.value)}
+                              rows={4}
+                              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-zinc-600">다음 복습 예정일</label>
+                            <input
+                              type="date"
+                              value={draft.nextReview ?? ""}
+                              onChange={(e) => handleDraftChange("nextReview", e.target.value)}
+                              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                            />
+                          </div>
+                        </>
+                      ) : null}
                     </div>
 
                     <div className="mt-4 flex justify-end gap-2">
@@ -600,10 +613,11 @@ class Main {
                     </div>
                   </div>
 
-                  {(attempt.failureCategory ||
-                    attempt.failureReason ||
-                    attempt.learnings ||
-                    attempt.nextReview) && (
+                  {attempt.verdict !== "AC" &&
+                    (attempt.failureCategory ||
+                      attempt.failureReason ||
+                      attempt.learnings ||
+                      attempt.nextReview) && (
                     <div className="space-y-3 rounded-lg border border-rose-100 bg-rose-50 p-3">
                       <div className="text-base font-semibold text-rose-600">실패/교훈 메모</div>
                       {attempt.failureCategory && (
