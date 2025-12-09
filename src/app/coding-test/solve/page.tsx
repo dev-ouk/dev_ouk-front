@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, XCircle, Timer, Code2 } from "lucide-react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { SidebarLayout } from "../../_components/sidebar-layout";
 
 type SearchParams = {
@@ -310,9 +312,21 @@ class Main {
                       <Code2 className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                       코드
                     </div>
-                    <pre className="max-h-64 overflow-auto rounded-lg bg-black px-3 py-2 text-xs text-white">
+                    <div className="max-h-96 overflow-auto rounded-lg border border-zinc-200">
+                      <SyntaxHighlighter
+                        language={(attempt.language ?? "text").toLowerCase()}
+                        style={oneDark}
+                        customStyle={{
+                          margin: 0,
+                          borderRadius: "0.75rem",
+                          fontSize: "12px",
+                          lineHeight: "1.6",
+                        }}
+                        showLineNumbers
+                      >
 {attempt.code}
-                    </pre>
+                      </SyntaxHighlighter>
+                    </div>
                   </div>
 
                   {(attempt.failureCategory ||
