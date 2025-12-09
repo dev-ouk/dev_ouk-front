@@ -2,11 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ArrowLeft, CheckCircle2, XCircle, Timer, Code2 } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { SidebarLayout } from "../../_components/sidebar-layout";
+import { useSearchParams } from "next/navigation";
 
 type SearchParams = {
   site?: string;
@@ -15,6 +16,20 @@ type SearchParams = {
   difficulty?: string;
   verdict?: string;
   attemptedAt?: string;
+};
+
+type Attempt = {
+  title: string;
+  verdict: string;
+  attemptedAt: string;
+  duration: string;
+  language: string;
+  summary: string;
+  code?: string;
+  failureCategory?: string;
+  failureReason?: string;
+  learnings?: string;
+  nextReview?: string;
 };
 
 const SITE_META: Record<
@@ -80,33 +95,35 @@ function getVerdictDisplay(verdict?: string | null) {
   }
 }
 
-export default function SolvePage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
+export default function SolvePage() {
   const [activeTab, setActiveTab] = useState(0);
+  const [draft, setDraft] = useState<Attempt | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const searchParams = useSearchParams();
 
   const data = useMemo(() => {
-    const parsedDifficulty = searchParams.difficulty ? Number(searchParams.difficulty) : null;
+    const getOrDefault = (key: keyof SearchParams, fallback: string) =>
+      searchParams?.get(key) ?? fallback;
+    const parsedDifficulty = searchParams?.get("difficulty")
+      ? Number(searchParams.get("difficulty"))
+      : null;
     const difficulty =
       parsedDifficulty == null || Number.isNaN(parsedDifficulty) ? 15 : parsedDifficulty;
 
-    // API 연동 전이므로 검색 파라미터가 없으면 예시 데이터를 사용합니다.
     return {
-      site: searchParams.site ?? "BAEKJOON",
-      siteProblemId: searchParams.siteProblemId ?? "1000",
-      title: searchParams.title ?? "A+B",
+      site: getOrDefault("site", "BAEKJOON"),
+      siteProblemId: getOrDefault("siteProblemId", "1000"),
+      title: getOrDefault("title", "A+B"),
       difficulty,
       lastAttempt: {
-        verdict: searchParams.verdict ?? "AC",
-        attemptedAt: searchParams.attemptedAt ?? "2025-12-05T13:45:00Z",
+        verdict: getOrDefault("verdict", "AC"),
+        attemptedAt: getOrDefault("attemptedAt", "2025-12-05T13:45:00Z"),
       },
     };
   }, [searchParams]);
 
   // API 연동 전: 최근 시도/상태 탭용 가짜 데이터
-  const attempts = [
+  const [attempts, setAttempts] = useState<Attempt[]>([
     {
       title: "12월 5일 시도",
       verdict: "AC",
@@ -199,7 +216,60 @@ class Main {
         "다음에는 구현 전에 상태·제약·복잡도를 체크리스트로 작성한 뒤 진행하기.",
       nextReview: "2025-12-08",
     },
-  ];
+  ]);
+
+  const handleAddAttempt = () => {
+    const now = new Date();
+    const iso = now.toISOString();
+    const label = formatAttemptedAt(iso);
+
+    const newDraft: Attempt = {
+      title: `${label} 시도`,
+      verdict: "AC",
+      attemptedAt: iso,
+      duration: "10분",
+      language: "Java",
+      summary: "",
+      code: "",
+      failureCategory: "",
+      failureReason: "",
+      learnings: "",
+      nextReview: label,
+    };
+
+    setDraft(newDraft);
+    setIsEditing(true);
+    setActiveTab(attempts.length);
+  };
+
+  const handleDraftChange = <K extends keyof Attempt>(key: K, value: Attempt[K]) => {
+    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const handleSaveDraft = () => {
+    if (!draft) return;
+    setAttempts((prev) => {
+      const updated = [...prev, draft];
+      setActiveTab(updated.length - 1);
+      return updated;
+    });
+    setDraft(null);
+    setIsEditing(false);
+  };
+
+  const handleCancelDraft = () => {
+    setDraft(null);
+    setIsEditing(false);
+    setActiveTab((prev) => (prev >= attempts.length ? Math.max(0, attempts.length - 1) : prev));
+  };
+
+  // activeTab이 유효한 범위를 벗어나지 않도록 보정
+  useEffect(() => {
+    const displayLength = (isEditing && draft ? attempts.length + 1 : attempts.length) || 1;
+    if (activeTab >= displayLength) {
+      setActiveTab(Math.max(0, displayLength - 1));
+    }
+  }, [activeTab, attempts.length, draft, isEditing]);
 
   const meta = getMeta(data.site);
 
@@ -284,29 +354,203 @@ class Main {
         </div>
 
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap gap-2 border-b border-zinc-200 pb-3">
-            {attempts.map((attempt, idx) => {
-              const { label, className } = getVerdictDisplay(attempt.verdict);
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setActiveTab(idx)}
-                  className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
-                    activeTab === idx
-                      ? "bg-zinc-900 text-white"
-                      : "border border-zinc-200 text-zinc-700 hover:border-zinc-300"
-                  }`}
-                >
-                  {attempt.title} <span className={className}>· {label}</span>
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-3">
+            <div className="flex flex-wrap gap-2">
+              {(isEditing && draft ? [...attempts, draft] : attempts).map((attempt, idx) => {
+                const { label, className } = getVerdictDisplay(attempt.verdict);
+                const isDraftTab = isEditing && draft && idx === attempts.length;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveTab(idx)}
+                    className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
+                      activeTab === idx
+                        ? "bg-zinc-900 text-white"
+                        : "border border-zinc-200 text-zinc-700 hover:border-zinc-300"
+                    }`}
+                  >
+                    {isDraftTab ? "새 시도 (편집중)" : attempt.title} <span className={className}>· {label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={handleAddAttempt}
+              className="rounded-full border border-dashed border-zinc-300 px-3 py-1 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900"
+            >
+              + 시도 추가
+            </button>
           </div>
 
           <div className="mt-4 space-y-2">
             {(() => {
-              const attempt = attempts[activeTab] ?? attempts[0];
+              const displayAttempts = isEditing && draft ? [...attempts, draft] : attempts;
+              const attempt = displayAttempts[activeTab] ?? displayAttempts[0];
+              const isDraftTab = isEditing && draft && activeTab === attempts.length;
+
+              if (isDraftTab && draft) {
+                return (
+                  <div className="space-y-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-4">
+                    <div className="flex items-center justify-between pb-1">
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Attempt</p>
+                        <h2 className="text-lg font-semibold text-zinc-900">새 시도 작성</h2>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelDraft}
+                          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveDraft}
+                          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
+                        >
+                          저장
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">제목</label>
+                        <input
+                          type="text"
+                          value={draft.title}
+                          onChange={(e) => handleDraftChange("title", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">시도 일시</label>
+                        <input
+                          type="text"
+                          value={draft.attemptedAt}
+                          onChange={(e) => handleDraftChange("attemptedAt", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">풀이 시간</label>
+                        <input
+                          type="text"
+                          value={draft.duration}
+                          onChange={(e) => handleDraftChange("duration", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">사용 언어</label>
+                        <input
+                          type="text"
+                          value={draft.language}
+                          onChange={(e) => handleDraftChange("language", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">시도 결과</label>
+                        <select
+                          value={draft.verdict}
+                          onChange={(e) => handleDraftChange("verdict", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        >
+                          {["AC", "WA", "TLE", "MLE", "RE", "CE", "PE", "GAVE_UP"].map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">복습 예정일</label>
+                        <input
+                          type="text"
+                          value={draft.nextReview ?? ""}
+                          onChange={(e) => handleDraftChange("nextReview", e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">풀이 정리</label>
+                        <textarea
+                          value={draft.summary}
+                          onChange={(e) => handleDraftChange("summary", e.target.value)}
+                          rows={4}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">코드</label>
+                        <textarea
+                          value={draft.code ?? ""}
+                          onChange={(e) => handleDraftChange("code", e.target.value)}
+                          rows={6}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 font-mono text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-zinc-600">실패 원인 분류</label>
+                          <input
+                            type="text"
+                            value={draft.failureCategory ?? ""}
+                            onChange={(e) => handleDraftChange("failureCategory", e.target.value)}
+                            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-zinc-600">구체적 원인</label>
+                          <input
+                            type="text"
+                            value={draft.failureReason ?? ""}
+                            onChange={(e) => handleDraftChange("failureReason", e.target.value)}
+                            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-zinc-600">해결과정/배운점</label>
+                        <textarea
+                          value={draft.learnings ?? ""}
+                          onChange={(e) => handleDraftChange("learnings", e.target.value)}
+                          rows={4}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-zinc-300"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCancelDraft}
+                        className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveDraft}
+                        className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
+                      >
+                        저장
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               const verdictDisplay = getVerdictDisplay(attempt.verdict);
               const Icon = verdictDisplay.Icon;
               return (
@@ -338,7 +582,7 @@ class Main {
                       <Code2 className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                       코드
                     </div>
-                    <div className="max-h-96 overflow-auto rounded-lg border border-zinc-200">
+                    <div className="overflow-x-auto rounded-lg border border-zinc-200">
                       <SyntaxHighlighter
                         language={(attempt.language ?? "text").toLowerCase()}
                         style={oneDark}
