@@ -6,7 +6,7 @@ export default function WorkoutPage() {
   return (
     <SidebarLayout>
       <div className="flex flex-1 flex-col justify-center">
-        <div className="max-w-3xl space-y-6">
+        <div className="mx-auto w-full max-w-3xl space-y-6">
           <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Workout
           </p>
