@@ -42,6 +42,14 @@ type ProblemPreview = {
   } | null;
 };
 
+type ProblemsResponse = {
+  items?: Problem[];
+  size?: number;
+  hasNext?: boolean;
+  nextCursor?: string | null;
+  sort?: string | null;
+};
+
 type ProblemCandidate = {
   site: string;
   siteProblemId: string;
@@ -215,8 +223,12 @@ export default function CodingTestPage() {
           throw new Error(`문제 목록을 불러올 수 없습니다. (status: ${response.status})`);
         }
 
-        const payload = (await response.json()) as Problem[];
-        setProblems(Array.isArray(payload) ? payload : []);
+        const payload = (await response.json()) as ProblemsResponse | Problem[];
+        if (Array.isArray(payload)) {
+          setProblems(payload);
+        } else {
+          setProblems(payload.items ?? []);
+        }
       } catch (fetchError) {
         if ((fetchError as Error).name === "AbortError") {
           return;
