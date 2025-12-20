@@ -17,7 +17,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import { Node, mergeAttributes } from "@tiptap/core";
-import { TextSelection } from "prosemirror-state";
+import { TextSelection, NodeSelection } from "prosemirror-state";
 import { useEffect, useState, useRef } from "react";
 
 export type DsnaEditorProps = {
@@ -414,6 +414,34 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       handleKeyDown: (view: any, event: any) => {
         const { state } = view;
         const { selection } = state;
+        
+        // ✅ 블록 선택 상태에서 Enter/Backspace 처리 (노션식)
+        if (selection instanceof NodeSelection) {
+          const pos = selection.from;
+          const node = state.doc.nodeAt(pos);
+          if (!node) return false;
+
+          // Enter => 아래에 새 paragraph 만들고 커서 이동
+          if (event.key === "Enter") {
+            event.preventDefault();
+            const insertPos = pos + node.nodeSize;
+            let tr = state.tr.insert(insertPos, state.schema.nodes.paragraph.create());
+            tr = tr.setSelection(TextSelection.near(tr.doc.resolve(insertPos + 1)));
+            view.dispatch(tr);
+            return true;
+          }
+
+          // Backspace/Delete => 선택 블록 삭제
+          if (event.key === "Backspace" || event.key === "Delete") {
+            event.preventDefault();
+            let tr = state.tr.delete(pos, pos + node.nodeSize);
+            const next = Math.min(tr.doc.content.size, Math.max(0, pos - 1));
+            tr = tr.setSelection(TextSelection.near(tr.doc.resolve(next)));
+            view.dispatch(tr);
+            return true;
+          }
+        }
+        
         const { $from } = selection;
         
         // ✅ Toggle Notion-like behavior (닫힘 Enter=아래에 새 토글, Backspace=탈출/삭제)
@@ -1303,9 +1331,16 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           }}
           onMouseDown={(e) => {
             e.preventDefault();
-            editor?.chain().focus().run();
+            if (!editor) return;
+            const nodePos = handle.nodePos;
+            if (nodePos == null) return;
+            const { state, dispatch } = editor.view;
+            const node = state.doc.nodeAt(nodePos);
+            if (!node) return;
+            dispatch(state.tr.setSelection(NodeSelection.create(state.doc, nodePos)));
+            editor.commands.focus();
           }}
-          title="드래그"
+          title="블록 선택/드래그"
         >
           ⋮⋮
         </button>
@@ -1453,11 +1488,58 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror ol ol { list-style-type: lower-alpha; }
         .dsna-editor.ProseMirror ol ol ol { list-style-type: lower-roman; }
         .dsna-editor.ProseMirror ol ol ol ol { list-style-type: decimal; }
-        /* hover 배경(노션처럼 줄 단위로) */
+        /* =========================
+           ✅ Notion-like Selection (Notion 느낌)
+           - 아주 미묘한 border + 약한 shadow
+           - 일반 블록은 gutter 제외
+           - 리스트는 "마커 영역"까지 포함
+           ========================= */
+        /* 0) 기본 selectednode 배경은 끄기 */
+        .dsna-editor.ProseMirror .ProseMirror-selectednode {
+          background: transparent !important;
+        }
+        /* ✅ 선택 톤(노션 느낌: 거의 회색빛 border + 약한 그림자) */
+        .dsna-editor.ProseMirror {
+          --dsna-select-bg: rgba(24, 24, 27, 0.02);        /* zinc-900 아주 옅게 */
+          --dsna-select-border: rgba(24, 24, 27, 0.08);    /* 얇은 테두리 */
+          --dsna-select-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        }
+        /* 1) 최상위 블록(ul/ol 제외): gutter 제외하고 내용영역만 선택 표시 */
+        .dsna-editor.ProseMirror > *:not(ul):not(ol).ProseMirror-selectednode {
+          position: relative;
+          z-index: 0;
+        }
+        .dsna-editor.ProseMirror > *:not(ul):not(ol).ProseMirror-selectednode::before {
+          content: "";
+          position: absolute;
+          left: var(--dsna-gutter);   /* ✅ 핸들/+/:: 영역 제외 */
+          right: 0;
+          top: -0.05rem;
+          bottom: -0.05rem;
+          background: var(--dsna-select-bg);
+          border: 1px solid var(--dsna-select-border);
+          border-radius: 0.45rem;
+          box-shadow: var(--dsna-select-shadow);
+          pointer-events: none;
+          z-index: -1;
+        }
+        /* 2) ✅ 리스트 마커 영역까지 포함시키기 위한 핵심:
+              ul/ol이 자기 "marker padding" 값을 들고 있고(li가 상속받음),
+              li::after가 왼쪽을 음수로 당겨서 마커(동그라미/숫자)까지 덮는다. */
+        .dsna-editor.ProseMirror ul,
+        .dsna-editor.ProseMirror ol {
+          --dsna-marker-pad: var(--dsna-list-pad); /* 기본 마커 공간 */
+        }
+        /* nested list는 들여쓰기 값이 마커 공간 역할을 하니까 별도 지정 */
+        .dsna-editor.ProseMirror li > ul,
+        .dsna-editor.ProseMirror li > ol {
+          --dsna-marker-pad: var(--dsna-list-indent);
+        }
+        /* hover 배경(노션처럼 줄 단위로) - ✅ 마커까지 포함 */
         .dsna-editor.ProseMirror li::after {
           content: "";
           position: absolute;
-          left: 0;
+          left: calc(-1 * var(--dsna-marker-pad)); /* ✅ 마커까지 덮기 */
           right: 0;
           top: -0.05rem;
           bottom: -0.05rem;
@@ -1468,10 +1550,11 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror li:hover::after {
           background: #fbfbfb;
         }
-        /* 최상위 리스트 아이템 hover는 gutter까지 확장 */
-        .dsna-editor.ProseMirror > ul > li::after,
-        .dsna-editor.ProseMirror > ol > li::after {
-          left: calc(-1 * var(--dsna-gutter));
+        /* 3) ✅ 리스트 선택 표시도 동일한 ::after를 재사용 (마커까지 포함) */
+        .dsna-editor.ProseMirror li.ProseMirror-selectednode::after {
+          background: var(--dsna-select-bg);
+          border: 1px solid var(--dsna-select-border);
+          box-shadow: var(--dsna-select-shadow);
         }
         .dsna-editor.ProseMirror > *:active {
           cursor: grabbing;
