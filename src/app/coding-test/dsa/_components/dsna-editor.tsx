@@ -347,6 +347,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
   const [emojiCoords, setEmojiCoords] = useState<{ left: number; top: number } | null>(null);
   const [emojiResults, setEmojiResults] = useState<typeof EMOJIS>([]);
   const editorRef = useRef<HTMLDivElement>(null);
+  const editorInstanceRef = useRef<any>(null);
   
   // ✅ 핸들 오버레이 상태
   type HandleState = {
@@ -369,6 +370,9 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
   const rafRef = useRef<number>(0);
 
   const editor = useEditor({
+    onCreate: ({ editor }) => {
+      editorInstanceRef.current = editor;
+    },
     extensions: [
       StarterKit.configure({
         // Shift+Enter: 같은 블록 내 줄바꿈
@@ -476,6 +480,68 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           }
         }
         
+        // ===== ✅ Notion-like List Behavior =====
+        const ed = editorInstanceRef.current;
+        const findListItemDepth = () => {
+          for (let d = $from.depth; d > 0; d--) {
+            if ($from.node(d).type.name === "listItem") return d;
+          }
+          return null;
+        };
+        const listItemDepth = findListItemDepth();
+        const inListItem = listItemDepth != null;
+        const isEmptyParagraph =
+          $from.parent.type.name === "paragraph" && $from.parent.content.size === 0;
+        const isAtStart = $from.parentOffset === 0;
+
+        // 1) Enter: 빈 리스트 아이템이면 "리스트 탈출" (노션)
+        if (event.key === "Enter" && selection.empty && inListItem && isEmptyParagraph) {
+          event.preventDefault();
+          ed?.commands.liftListItem("listItem");
+          return true;
+        }
+
+        // 2) Backspace: 빈 리스트 아이템 + 맨 앞이면 "리스트 삭제/해제" (노션)
+        if (event.key === "Backspace" && selection.empty && inListItem && isEmptyParagraph && isAtStart) {
+          event.preventDefault();
+          ed?.commands.liftListItem("listItem");
+          return true;
+        }
+
+        // 3) 마크다운 단축키: "- " / "* " / "1. " => 리스트 생성 (노션)
+        if (event.key === " " && selection.empty && !inListItem && $from.parent.type.name === "paragraph") {
+          // 커서 앞 텍스트(문단 시작 ~ 커서)
+          const paraStart = $from.start();
+          const typed = state.doc.textBetween(paraStart, $from.pos, "", "");
+          // 문단 전체 텍스트가 typed와 같은지(= 커서가 문단 끝에 있는지) 체크
+          const full = $from.parent.textContent;
+
+          // "- " or "* "
+          if ((typed === "-" || typed === "*") && full === typed) {
+            event.preventDefault();
+            ed
+              ?.chain()
+              .focus()
+              .deleteRange({ from: paraStart, to: $from.pos })
+              .toggleBulletList()
+              .run();
+            return true;
+          }
+
+          // "1. " / "2. " ...
+          if (/^\d+\.$/.test(typed) && full === typed) {
+            event.preventDefault();
+            ed
+              ?.chain()
+              .focus()
+              .deleteRange({ from: paraStart, to: $from.pos })
+              .toggleOrderedList()
+              .run();
+            return true;
+          }
+        }
+        // ===== ✅ Notion-like List Behavior End =====
+        
         // 백틱(`) 입력 시 ``` 패턴 감지하여 코드블록 생성
         if (event.key === "`") {
           const blockStart = $from.start($from.depth);
@@ -547,68 +613,6 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
             return true;
           }
 
-          // Bullet List 단축키: -, * + Space
-          // 현재 노드의 텍스트를 직접 확인
-          const currentNode = $from.parent;
-          const currentNodeText = currentNode.textContent.trim();
-          if (currentNodeText === "-" || currentNodeText === "*") {
-            event.preventDefault();
-            const { tr } = state;
-            
-            // paragraph의 정확한 위치 ($from.before/$from.after 사용)
-            const paragraphBefore = $from.before($from.depth);
-            const paragraphAfter = $from.after($from.depth);
-            
-            // 위치 유효성 검사
-            if (paragraphBefore < 0 || paragraphAfter <= paragraphBefore || paragraphAfter > state.doc.content.size) {
-              return false;
-            }
-            
-            // 빈 paragraph 생성 (기호 없이)
-            const emptyParagraph = state.schema.nodes.paragraph.create();
-            // listItem 생성
-            const listItem = state.schema.nodes.listItem.create(null, emptyParagraph);
-            // bulletList 생성
-            const bulletList = state.schema.nodes.bulletList.create(null, listItem);
-            
-            // paragraph를 bulletList로 교체
-            tr.replaceWith(paragraphBefore, paragraphAfter, bulletList);
-            view.dispatch(tr);
-            return true;
-          }
-
-          // Ordered List 단축키: 1. + Space
-          const currentNodeForOrdered = $from.parent;
-          const currentNodeTextForOrdered = currentNodeForOrdered.textContent.trim();
-          if (/^\d+\.$/.test(currentNodeTextForOrdered)) {
-            event.preventDefault();
-            const depth = $from.depth;
-            const blockStart = $from.start(depth);
-            
-            // ✅ 현재 문단 범위 (원래 기준)
-            const paragraphBefore = $from.before(depth);
-            const paragraphAfter = $from.after(depth);
-            
-            let tr = state.tr;
-            
-            // 1) "1." 텍스트 삭제
-            tr = tr.delete(blockStart, blockStart + currentNodeTextForOrdered.length);
-            
-            // 2) 삭제 이후 변경된 좌표로 매핑
-            const mappedBefore = tr.mapping.map(paragraphBefore);
-            const mappedAfter = tr.mapping.map(paragraphAfter);
-            
-            // 3) 빈 paragraph -> listItem -> orderedList 생성
-            const emptyParagraph = state.schema.nodes.paragraph.create();
-            const listItem = state.schema.nodes.listItem.create(null, emptyParagraph);
-            const orderedList = state.schema.nodes.orderedList.create(null, listItem);
-            
-            // 4) paragraph를 orderedList로 교체 (매핑된 좌표 사용)
-            tr = tr.replaceWith(mappedBefore, mappedAfter, orderedList);
-            
-            view.dispatch(tr);
-            return true;
-          }
 
           // Code Block 단축키: ``` + Space
           if (textBeforeCursor === "```") {
@@ -638,25 +642,9 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
             return true;
           }
           
-          // 리스트 내에서 Enter 처리
-          const $pos = $from;
-          const listItem = $pos.node(-1);
-          if (listItem && (listItem.type.name === "listItem")) {
-            const listItemText = listItem.textContent.trim();
-            // 빈 리스트 아이템에서 Enter를 누르면 리스트 종료
-            if (listItemText === "") {
-              event.preventDefault();
-              const { tr } = state;
-              // 리스트 아이템을 일반 paragraph로 변환
-              const paragraph = state.schema.nodes.paragraph.create();
-              tr.replaceWith($pos.before(-1), $pos.after(-1), paragraph);
-              view.dispatch(tr);
-              return true;
-            }
-          }
         }
         
-        // 리스트 내에서 백스페이스 처리 - 빈 리스트 아이템에서 백스페이스 시 리스트 종료
+        // 일반 빈 블록(paragraph)에서의 Backspace 동작
         if (event.key === "Backspace") {
           const { state } = view;
           const { selection } = state;
@@ -667,71 +655,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
             return false;
           }
           
-          // 1) 리스트 아이템 안에서의 동작
-          const listItem = $from.node(-1);
-          if (listItem && listItem.type.name === "listItem") {
-            const paragraphNode = $from.parent;
-            
-            // 리스트 아이템 안의 문단이 비어있는지
-            const isEmpty = paragraphNode.textContent.length === 0;
-            // 커서가 문단의 맨 앞인지
-            const isAtStart = $from.parentOffset === 0;
-            
-            if (isEmpty && isAtStart) {
-              event.preventDefault();
-              const { tr } = state;
-              
-              // 바로 위에 bulletList / orderedList 가 있는지 확인
-              const maybeList = $from.node(-2);
-              const isList =
-                maybeList &&
-                (maybeList.type.name === "bulletList" ||
-                  maybeList.type.name === "orderedList");
-              
-              if (isList && maybeList.childCount === 1) {
-                // ✅ 이 경우: "리스트 전체가 하나의 아이템만 가지고 있고,
-                //             그게 지금 비어있는 상태" → 통째로 paragraph로 변경
-                const listDepth = $from.depth - 2; // bulletList / orderedList 깊이
-                
-                if (listDepth <= 0) {
-                  return false;
-                }
-                
-                const from = $from.before(listDepth);
-                const to = $from.after(listDepth);
-                const paragraph = state.schema.nodes.paragraph.create();
-                
-                tr.replaceWith(from, to, paragraph);
-                
-                const resolved = tr.doc.resolve(from + 1);
-                tr.setSelection(TextSelection.near(resolved));
-                
-                view.dispatch(tr);
-                return true;
-              } else {
-                // ✅ 일반적인 케이스: 리스트 중간 아이템 → 그 item만 paragraph로 변환
-                const listItemDepth = $from.depth - 1;
-                
-                if (listItemDepth <= 0) {
-                  return false;
-                }
-                
-                const from = $from.before(listItemDepth);
-                const to = $from.after(listItemDepth);
-                const paragraph = state.schema.nodes.paragraph.create();
-                
-                tr.replaceWith(from, to, paragraph);
-                
-                const resolved = tr.doc.resolve(from + 1);
-                tr.setSelection(TextSelection.near(resolved));
-                
-                view.dispatch(tr);
-                return true;
-              }
-            }
-          }
-          
-          // 2) 일반 빈 블록(paragraph)에서의 동작
+          // 일반 빈 블록(paragraph)에서의 동작
           const parent = $from.parent;
           const isParagraph = parent.type.name === "paragraph";
           const isEmpty = parent.content.size === 0;          // 완전 빈 문단
@@ -1090,7 +1014,16 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       }
       // 2) 아니면 top-level 블록(= doc의 직접 자식)
       //    (heading/paragraph/pre/hr/div 등)
-      if ($pos.depth >= 1) return $pos.before(1);
+      if ($pos.depth >= 1) {
+        const topPos = $pos.before(1);
+        const topNode = view.state.doc.nodeAt(topPos);
+        if (!topNode) return null;
+        // ✅ ul/ol 자체는 블록으로 취급하지 않음 (핸들 흔들림 방지)
+        if (topNode.type.name === "bulletList" || topNode.type.name === "orderedList") {
+          return null;
+        }
+        return topPos;
+      }
       return null;
     };
 
@@ -1476,24 +1409,69 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           color: #52525b;
           border-color: #e4e4e7;
         }
-        /* ✅ 리스트는 marker를 사용 */
+        /* === List: Notion-like (v3, native markers) === */
+        .dsna-editor.ProseMirror {
+          --dsna-list-pad: 1.55rem;     /* 리스트 마커 공간(기본) */
+          --dsna-list-indent: 1.35rem;  /* nested 들여쓰기(노션 느낌) */
+        }
+        /* 기본 list marker 살리기 */
         .dsna-editor.ProseMirror ul,
         .dsna-editor.ProseMirror ol {
-          list-style: initial;
-          padding-left: 1.5rem;
-          margin: 0;
+          margin: 0.15rem 0;
+          padding-left: var(--dsna-list-pad);
         }
-        /* ✅ li를 블록처럼 만들고, 핸들 영역까지 hover되도록 왼쪽 확장 */
+        /* 최상위 리스트는 gutter까지 확장 */
+        .dsna-editor.ProseMirror > ul,
+        .dsna-editor.ProseMirror > ol {
+          margin-left: calc(-1 * var(--dsna-gutter));
+          padding-left: calc(var(--dsna-gutter) + var(--dsna-list-pad));
+        }
+        /* 아이템 간격/라인 높이(노션처럼 촘촘) */
         .dsna-editor.ProseMirror li {
           position: relative;
-          margin: 0.1em 0;
-          padding-left: var(--dsna-gutter);
-          margin-left: calc(-1 * var(--dsna-gutter));
-          min-height: 1.4em;
-          color: #171717;
+          z-index: 0;
+          padding: 0.05rem 0;
         }
-        .dsna-editor.ProseMirror li:hover {
-          background-color: #fbfbfb;
+        .dsna-editor.ProseMirror li p {
+          margin: 0;
+          line-height: 1.55;
+          min-height: 1.4em;
+        }
+        /* nested list 들여쓰기 + 위 간격 */
+        .dsna-editor.ProseMirror li > ul,
+        .dsna-editor.ProseMirror li > ol {
+          margin: 0.1rem 0 0;
+          padding-left: var(--dsna-list-indent);
+        }
+        /* ✅ 노션식 bullet depth 모양: ● → ○ → ■ → 반복 */
+        .dsna-editor.ProseMirror ul { list-style-type: disc; }
+        .dsna-editor.ProseMirror ul ul { list-style-type: circle; }
+        .dsna-editor.ProseMirror ul ul ul { list-style-type: square; }
+        .dsna-editor.ProseMirror ul ul ul ul { list-style-type: disc; }
+        /* ✅ 노션식 ordered depth: 1. → a. → i. → 반복 */
+        .dsna-editor.ProseMirror ol { list-style-type: decimal; }
+        .dsna-editor.ProseMirror ol ol { list-style-type: lower-alpha; }
+        .dsna-editor.ProseMirror ol ol ol { list-style-type: lower-roman; }
+        .dsna-editor.ProseMirror ol ol ol ol { list-style-type: decimal; }
+        /* hover 배경(노션처럼 줄 단위로) */
+        .dsna-editor.ProseMirror li::after {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: -0.05rem;
+          bottom: -0.05rem;
+          border-radius: 0.25rem;
+          background: transparent;
+          z-index: -1;
+        }
+        .dsna-editor.ProseMirror li:hover::after {
+          background: #fbfbfb;
+        }
+        /* 최상위 리스트 아이템 hover는 gutter까지 확장 */
+        .dsna-editor.ProseMirror > ul > li::after,
+        .dsna-editor.ProseMirror > ol > li::after {
+          left: calc(-1 * var(--dsna-gutter));
         }
         .dsna-editor.ProseMirror > *:active {
           cursor: grabbing;
