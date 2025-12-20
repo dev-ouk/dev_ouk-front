@@ -254,6 +254,9 @@ const ToggleBlock = Node.create({
   content: "block+",
   defining: true,
   isolating: true,
+  // ✅ 추가
+  selectable: true,
+  draggable: true,
   addAttributes() {
     return {
       open: { default: true },
@@ -1033,20 +1036,26 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
 
     const pickBlockNodePos = (pos: number) => {
       const $pos = view.state.doc.resolve(pos);
-      // 1) 리스트 아이템이면 listItem을 블록으로
+      // ✅ 0) toggle 내부면: 토글 자체를 블록 루트로 고정
+      for (let d = $pos.depth; d > 0; d--) {
+        const n = $pos.node(d);
+        if (n.type.name === "toggle") {
+          return $pos.before(d);
+        }
+      }
+      // ✅ 1) listItem이면: listItem을 블록 루트로
       for (let d = $pos.depth; d > 0; d--) {
         const n = $pos.node(d);
         if (n.type.name === "listItem") {
           return $pos.before(d);
         }
       }
-      // 2) 아니면 top-level 블록(= doc의 직접 자식)
-      //    (heading/paragraph/pre/hr/div 등)
+      // ✅ 2) 아니면 top-level 블록(= doc의 직접 자식)
       if ($pos.depth >= 1) {
         const topPos = $pos.before(1);
         const topNode = view.state.doc.nodeAt(topPos);
         if (!topNode) return null;
-        // ✅ ul/ol 자체는 블록으로 취급하지 않음 (핸들 흔들림 방지)
+        // ul/ol 자체는 블록 취급 X (흔들림 방지)
         if (topNode.type.name === "bulletList" || topNode.type.name === "orderedList") {
           return null;
         }
@@ -1091,22 +1100,44 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
 
       lastNodePosRef.current = nodePos;
 
-      const dom = view.nodeDOM(nodePos) as HTMLElement | null;
-      if (!dom) {
+      const getAnchorRect = (nodePos: number) => {
+        const nodeDom = view.nodeDOM(nodePos) as HTMLElement | null;
+        if (!nodeDom) return null;
+        const node = view.state.doc.nodeAt(nodePos);
+        if (!node) return nodeDom.getBoundingClientRect();
+
+        // ✅ toggle: 제목(첫 블록) 기준
+        if (node.type.name === "toggle") {
+          const titleEl = nodeDom.querySelector(".dsna-toggle-content > :first-child") as HTMLElement | null;
+          return (titleEl ?? nodeDom).getBoundingClientRect();
+        }
+
+        // ✅ listItem: 첫 줄 paragraph 기준
+        if (node.type.name === "listItem") {
+          const p = nodeDom.querySelector(":scope > p") as HTMLElement | null;
+          return (p ?? nodeDom).getBoundingClientRect();
+        }
+
+        return nodeDom.getBoundingClientRect();
+      };
+
+      const anchorRect = getAnchorRect(nodePos);
+      if (!anchorRect) {
         setHandle((h) => ({ ...h, visible: false, nodePos: null }));
         return;
       }
 
-      const blockRect = dom.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
 
       const BTN_W = 20;
       const GAP = 6;
       const LEFT_PAD = 8;
+      // ✅ 첫 줄 높이 기반(너무 작거나 크지 않게 clamp)
       const HANDLE_H = 24;
+      const lineH = Math.max(18, Math.min(anchorRect.height, 28));
 
-      // y는 블록 기준으로 유지
-      const y = blockRect.top - rootRect.top + blockRect.height / 2 - HANDLE_H / 2;
+      // ✅ y = "첫 줄(top)" 기준으로 배치
+      const y = anchorRect.top - rootRect.top + (lineH - HANDLE_H) / 2;
       
       // x는 고정 gutter 기준
       const handleX = LEFT_PAD + BTN_W + GAP;
