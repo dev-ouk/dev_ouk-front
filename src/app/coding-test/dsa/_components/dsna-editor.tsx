@@ -271,6 +271,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     height: 24,
   });
   const handleRef = useRef<HTMLButtonElement>(null);
+  const plusRef = useRef<HTMLButtonElement>(null);
   const lastNodePosRef = useRef<number | null>(null);
   const rafRef = useRef<number>(0);
 
@@ -844,6 +845,42 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     setEmojiResults([]);
   };
 
+  // ✅ 아래에 새 블록 삽입 함수
+  const insertBlockBelow = () => {
+    if (!editor) return;
+
+    const nodePos = handle.nodePos;
+    if (nodePos == null) return;
+
+    const { state, dispatch } = editor.view;
+    const node = state.doc.nodeAt(nodePos);
+    if (!node) return;
+
+    const insertPos = nodePos + node.nodeSize;
+    let tr = state.tr;
+
+    // 1) listItem이면: 같은 리스트 안에 새 listItem 추가
+    if (node.type.name === "listItem") {
+      const p = state.schema.nodes.paragraph.create();
+      const li = state.schema.nodes.listItem.create(null, p);
+      tr = tr.insert(insertPos, li);
+      // 커서를 새 listItem의 paragraph 안으로
+      const selPos = Math.min(tr.doc.content.size, insertPos + 2);
+      tr = tr.setSelection(TextSelection.near(tr.doc.resolve(selPos)));
+      dispatch(tr);
+      editor.chain().focus().run();
+      return;
+    }
+
+    // 2) 일반 블록이면: paragraph 추가
+    const p = state.schema.nodes.paragraph.create();
+    tr = tr.insert(insertPos, p);
+    const selPos = Math.min(tr.doc.content.size, insertPos + 1);
+    tr = tr.setSelection(TextSelection.near(tr.doc.resolve(selPos)));
+    dispatch(tr);
+    editor.chain().focus().run();
+  };
+
   // ✅ 핸들 오버레이 - ProseMirror API 기반 안정 버전
   useEffect(() => {
     if (!editor || !editorRef.current) return;
@@ -867,18 +904,20 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     };
 
     const updateByClientPoint = (clientX: number, clientY: number) => {
-      // ✅ 마우스가 핸들 위에 있으면 숨기지 말고 유지 (깜빡임 방지)
-      const ht = handleRef.current;
-      if (ht) {
-        const r = ht.getBoundingClientRect();
-        if (
+      // ✅ 마우스가 핸들이나 + 버튼 위에 있으면 숨기지 말고 유지 (깜빡임 방지)
+      const isPointerOn = (el: HTMLElement | null) => {
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return (
           clientX >= r.left &&
           clientX <= r.right &&
           clientY >= r.top &&
           clientY <= r.bottom
-        ) {
-          return;
-        }
+        );
+      };
+      
+      if (isPointerOn(handleRef.current) || isPointerOn(plusRef.current)) {
+        return;
       }
 
       const coords = view.posAtCoords({ left: clientX, top: clientY });
@@ -909,17 +948,20 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       const blockRect = dom.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
 
-      const HANDLE_W = 20;
+      const BTN_W = 20;
+      const GAP = 6;
+      const LEFT_PAD = 8;
       const HANDLE_H = 24;
-      const LEFT_PAD = 8; // gutter 안쪽 여백(원하면 조절)
 
-      // root 기준 상대좌표로 변환
-      const x = blockRect.left - rootRect.left + LEFT_PAD;
+      // y는 블록 기준으로 유지
       const y = blockRect.top - rootRect.top + blockRect.height / 2 - HANDLE_H / 2;
+      
+      // x는 고정 gutter 기준
+      const handleX = LEFT_PAD + BTN_W + GAP;
 
       setHandle({
         visible: true,
-        x,
+        x: handleX,
         y,
         nodePos,
         height: HANDLE_H,
@@ -1101,6 +1143,28 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         <EditorContent editor={editor} />
       </div>
 
+      {/* ✅ + 오버레이 버튼 */}
+      {handle.visible && (
+        <button
+          ref={plusRef}
+          type="button"
+          className="dsna-block-plus"
+          style={{
+            left: handle.x - (20 + 6), // 핸들보다 왼쪽 (+ 버튼 + 간격)
+            top: handle.y,
+            height: handle.height,
+            width: 20,
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault(); // blur 방지
+            insertBlockBelow();
+          }}
+          title="블록 추가"
+        >
+          +
+        </button>
+      )}
+
       {/* ✅ 핸들 오버레이 버튼 */}
       {handle.visible && (
         <button
@@ -1117,6 +1181,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
             e.preventDefault();
             editor?.chain().focus().run();
           }}
+          title="드래그"
         >
           ⋮⋮
         </button>
@@ -1158,8 +1223,9 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror {
           outline: none;
           position: relative;
-          /* Notion 스타일 gutter */
-          padding-left: 2.5rem;
+          /* Notion 스타일 gutter (기존 2.5rem -> 4.5rem) */
+          --dsna-gutter: 4.5rem;
+          padding-left: var(--dsna-gutter);
         }
         /* 각 블록(문단, heading, 코드블록 등) */
         .dsna-editor.ProseMirror > * {
@@ -1169,8 +1235,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         }
         /* 블록 hover 영역 확장 - 핸들 영역까지 포함하도록 마진 확장 */
         .dsna-editor.ProseMirror > *:not(ul):not(ol) {
-          margin-left: -2.5rem;
-          padding-left: 2.5rem;
+          margin-left: calc(-1 * var(--dsna-gutter));
+          padding-left: var(--dsna-gutter);
         }
         /* 배경색은 padding 영역(내용 부분)에만 적용되도록 */
         .dsna-editor.ProseMirror > *:not(ul):not(ol):hover {
@@ -1199,6 +1265,26 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-block-handle:active {
           cursor: grabbing;
         }
+        /* ✅ + 오버레이 버튼 스타일 */
+        .dsna-block-plus {
+          position: absolute;
+          z-index: 30;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 0.25rem;
+          border: 1px solid transparent;
+          background: transparent;
+          color: #a1a1aa;
+          font-size: 0.95rem;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .dsna-block-plus:hover {
+          background: #e4e4e7;
+          color: #52525b;
+          border-color: #e4e4e7;
+        }
         /* ✅ 리스트는 marker를 사용 */
         .dsna-editor.ProseMirror ul,
         .dsna-editor.ProseMirror ol {
@@ -1210,8 +1296,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror li {
           position: relative;
           margin: 0.1em 0;
-          padding-left: 2.5rem;
-          margin-left: -2.5rem;
+          padding-left: var(--dsna-gutter);
+          margin-left: calc(-1 * var(--dsna-gutter));
           min-height: 1.4em;
           color: #171717;
         }
@@ -1326,7 +1412,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror h3.is-empty::before {
           content: attr(data-placeholder);
           position: absolute;
-          left: 2.5rem;
+          left: var(--dsna-gutter);
           top: 0;
           color: #a1a1aa;
           pointer-events: none;
@@ -1336,7 +1422,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror h1.is-empty,
         .dsna-editor.ProseMirror h2.is-empty,
         .dsna-editor.ProseMirror h3.is-empty {
-          padding-left: 2.5rem;
+          padding-left: var(--dsna-gutter);
         }
         .dsna-editor.ProseMirror li > p.is-empty::before {
           left: 0;
