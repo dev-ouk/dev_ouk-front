@@ -16,6 +16,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
+import { Node, mergeAttributes } from "@tiptap/core";
 import { TextSelection } from "prosemirror-state";
 import { useEffect, useState, useRef } from "react";
 
@@ -246,6 +247,98 @@ const EMOJIS = [
   { shortcode: "infinity", emoji: "♾️" },
 ];
 
+// ✅ Toggle Block Extension
+const ToggleBlock = Node.create({
+  name: "toggle",
+  group: "block",
+  content: "block+",
+  defining: true,
+  isolating: true,
+  addAttributes() {
+    return {
+      open: { default: true },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-type="toggle"]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-type": "toggle" }),
+      0,
+    ];
+  },
+  addNodeView() {
+    return ({ node, editor, getPos }) => {
+      let currentNode = node;
+      const dom = document.createElement("div");
+      dom.className = "dsna-toggle";
+      dom.setAttribute("data-type", "toggle");
+
+      // ✅ 버튼/내용을 나란히 놓는 row
+      const row = document.createElement("div");
+      row.className = "dsna-toggle-row";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dsna-toggle-btn";
+      button.setAttribute("contenteditable", "false");
+
+      // children 렌더링되는 영역
+      const contentDOM = document.createElement("div");
+      contentDOM.className = "dsna-toggle-content";
+
+      const applyOpenState = () => {
+        const open = !!currentNode.attrs.open;
+        dom.dataset.open = open ? "true" : "false";
+        if (open) {
+          dom.classList.remove("is-collapsed");
+          button.textContent = "▾";
+        } else {
+          dom.classList.add("is-collapsed");
+          button.textContent = "▸";
+        }
+      };
+
+      button.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const pos = typeof getPos === "function" ? getPos() : null;
+        if (pos == null) return;
+
+        const nextOpen = !currentNode.attrs.open;
+        let tr = editor.state.tr.setNodeMarkup(pos, undefined, {
+          ...currentNode.attrs,
+          open: nextOpen,
+        });
+        // ✅ 닫을 때: 커서가 숨겨질 수 있으니 "제목(첫 블록)"로 이동
+        if (!nextOpen) {
+          const titlePos = Math.min(tr.doc.content.size, pos + 2);
+          tr = tr.setSelection(TextSelection.near(tr.doc.resolve(titlePos)));
+        }
+        editor.view.dispatch(tr);
+        editor.commands.focus();
+      });
+
+      row.appendChild(button);
+      row.appendChild(contentDOM);
+      dom.appendChild(row);
+      applyOpenState();
+
+      return {
+        dom,
+        contentDOM,
+        update(updatedNode) {
+          if (updatedNode.type !== currentNode.type) return false;
+          currentNode = updatedNode;
+          applyOpenState();
+          return true;
+        },
+      };
+    };
+  },
+});
+
 export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
   const [draggedBlock, setDraggedBlock] = useState<number | null>(null);
   const [dragOverBlock, setDragOverBlock] = useState<number | null>(null);
@@ -285,6 +378,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         // ✅ StarterKit 안의 기본 horizontalRule은 끄고
         horizontalRule: false,
       }),
+      ToggleBlock, // ✅ Toggle Block 추가
       // ✅ 따로 HorizontalRule 추가 (블록용 클래스를 붙이기 위해)
       HorizontalRule.extend({
         draggable: true, // 드래그도 블록처럼
@@ -342,6 +436,39 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           const blockStart = $from.start($from.depth);
           // 커서 위치까지의 텍스트 (Space 입력 전, 공백 제거)
           const textBeforeCursor = state.doc.textBetween(blockStart, $from.pos, "").trim();
+          
+          // Toggle 단축키: > + Space (Notion Toggle)
+          if (textBeforeCursor === ">") {
+            event.preventDefault();
+            // 리스트 안에서는 일단 막기(원하면 나중에 지원)
+            const inListItem = (() => {
+              for (let d = $from.depth; d > 0; d--) {
+                if ($from.node(d).type.name === "listItem") return true;
+              }
+              return false;
+            })();
+            if (inListItem) return true;
+
+            const depth = $from.depth;
+            const paragraphBefore = $from.before(depth);
+            const paragraphAfter = $from.after(depth);
+            let tr = state.tr;
+            const p = state.schema.nodes.paragraph;
+            const toggle = state.schema.nodes.toggle.create(
+              { open: true },
+              [
+                p.create(), // 제목(첫 블록)
+                p.create(), // 본문 시작(두번째 블록)
+              ]
+            );
+            tr = tr.replaceWith(paragraphBefore, paragraphAfter, toggle);
+            // 커서를 제목 paragraph 안으로 이동
+            const mappedStart = tr.mapping.map(paragraphBefore);
+            const cursorPos = Math.min(tr.doc.content.size, mappedStart + 2);
+            tr = tr.setSelection(TextSelection.near(tr.doc.resolve(cursorPos)));
+            view.dispatch(tr);
+            return true;
+          }
           
           // Heading 단축키: #, ##, ### + Space
           if (/^#{1,3}$/.test(textBeforeCursor)) {
@@ -1406,10 +1533,11 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           color: #1d4ed8;
         }
         /* === Placeholder === */
-        .dsna-editor.ProseMirror p.is-empty::before,
-        .dsna-editor.ProseMirror h1.is-empty::before,
-        .dsna-editor.ProseMirror h2.is-empty::before,
-        .dsna-editor.ProseMirror h3.is-empty::before {
+        /* ✅ 최상위 블록에서만 placeholder 위치/패딩 적용 */
+        .dsna-editor.ProseMirror > p.is-empty::before,
+        .dsna-editor.ProseMirror > h1.is-empty::before,
+        .dsna-editor.ProseMirror > h2.is-empty::before,
+        .dsna-editor.ProseMirror > h3.is-empty::before {
           content: attr(data-placeholder);
           position: absolute;
           left: var(--dsna-gutter);
@@ -1418,19 +1546,85 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           pointer-events: none;
           white-space: nowrap;
         }
-        .dsna-editor.ProseMirror p.is-empty,
-        .dsna-editor.ProseMirror h1.is-empty,
-        .dsna-editor.ProseMirror h2.is-empty,
-        .dsna-editor.ProseMirror h3.is-empty {
+        .dsna-editor.ProseMirror > p.is-empty,
+        .dsna-editor.ProseMirror > h1.is-empty,
+        .dsna-editor.ProseMirror > h2.is-empty,
+        .dsna-editor.ProseMirror > h3.is-empty {
           padding-left: var(--dsna-gutter);
         }
+        /* ✅ li 내부는 기존대로 */
         .dsna-editor.ProseMirror li > p.is-empty::before {
+          left: 0;
+        }
+        /* ✅ 토글 내부(중첩 포함)는 gutter 패딩 금지 → 기본 시작점(0) */
+        .dsna-toggle-content > p.is-empty,
+        .dsna-toggle-content > h1.is-empty,
+        .dsna-toggle-content > h2.is-empty,
+        .dsna-toggle-content > h3.is-empty {
+          padding-left: 0;
+        }
+        .dsna-toggle-content > p.is-empty::before,
+        .dsna-toggle-content > h1.is-empty::before,
+        .dsna-toggle-content > h2.is-empty::before,
+        .dsna-toggle-content > h3.is-empty::before {
           left: 0;
         }
         .dsna-editor.ProseMirror pre.is-empty::before {
           display: none;
         }
         .dsna-editor.ProseMirror codeBlock.is-empty::before {
+          display: none;
+        }
+        /* === Toggle Block (Notion-like) === */
+        .dsna-toggle {
+          position: relative;
+          overflow: visible;
+          /* 노션 느낌: 아이콘 슬롯 + 간격 */
+          --toggle-btn: 18px;
+          --toggle-gap: 6px;
+        }
+        /* 버튼이 흐름을 차지해야 "노션식 정렬"이 됨 */
+        .dsna-toggle-row {
+          display: flex;
+          align-items: flex-start;
+          overflow: visible;
+        }
+        /* ✅ 삼각형 버튼 = list marker처럼 레이아웃에 포함 */
+        .dsna-toggle-btn {
+          flex: 0 0 auto;
+          width: var(--toggle-btn);
+          height: var(--toggle-btn);
+          margin-top: 0.18rem;
+          margin-right: var(--toggle-gap);
+          padding: 0;
+          box-sizing: border-box;
+          border: 1px solid transparent;
+          border-radius: 0.25rem;
+          background: transparent;
+          color: #71717a;
+          cursor: pointer;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .dsna-toggle-btn:hover {
+          background: #e4e4e7;
+          border-color: #e4e4e7;
+          color: #27272a;
+        }
+        /* ✅ 내용은 버튼 오른쪽에서 시작 (제목/자식블록 전부 동일 컬럼) */
+        .dsna-toggle-content {
+          flex: 1 1 auto;
+          min-width: 0;
+          padding-left: 0; /* 중요 */
+        }
+        /* 제목(첫 블록) 위쪽 마진만 정리 */
+        .dsna-toggle-content > :first-child {
+          margin-top: 0;
+        }
+        /* 접힘 상태: 제목(첫 블록)만 남기고 나머지 숨김 */
+        .dsna-toggle.is-collapsed .dsna-toggle-content > :nth-child(n + 2) {
           display: none;
         }
       `}</style>
