@@ -412,6 +412,70 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         const { selection } = state;
         const { $from } = selection;
         
+        // ✅ Toggle Notion-like behavior (닫힘 Enter=아래에 새 토글, Backspace=탈출/삭제)
+        const getToggleCtx = () => {
+          for (let d = $from.depth; d > 0; d--) {
+            const n = $from.node(d);
+            if (n.type.name === "toggle") {
+              return {
+                depth: d,
+                pos: $from.before(d),     // toggle node 시작 pos
+                node: n,                  // toggle node
+                childIndex: $from.index(d) // toggle의 몇 번째 자식 안인지 (0=title)
+              };
+            }
+          }
+          return null;
+        };
+
+        const toggleCtx = getToggleCtx();
+
+        // 현재 커서가 toggle 안의 "제목(첫 블록)"에 있을 때만 노션식 처리
+        if (toggleCtx && toggleCtx.childIndex === 0 && selection.empty) {
+          const { pos: togglePos, node: toggleNode } = toggleCtx;
+          const inTitleParagraph = $from.parent.type.name === "paragraph";
+          const atStartOfTitle = $from.parentOffset === 0;
+          const titleEmpty = $from.parent.textContent.length === 0;
+
+          // 1) 닫힌 토글에서 Enter => 토글 "밖" 아래에 새 토글 생성
+          if (event.key === "Enter" && toggleNode.attrs.open === false) {
+            event.preventDefault();
+            const p = state.schema.nodes.paragraph;
+            const newToggle = state.schema.nodes.toggle.create(
+              { open: true },
+              [p.create(), p.create()]
+            );
+            const insertPos = togglePos + toggleNode.nodeSize; // 현재 토글 뒤
+            let tr = state.tr.insert(insertPos, newToggle);
+            // 새 토글의 title paragraph 안으로 커서 이동 (보통 +2가 안전)
+            const cursorPos = Math.min(tr.doc.content.size, insertPos + 2);
+            tr = tr.setSelection(TextSelection.near(tr.doc.resolve(cursorPos)));
+            view.dispatch(tr);
+            return true;
+          }
+
+          // 2) 토글 제목 맨 앞에서 Backspace
+          //    - 제목이 비어있으면 토글을 paragraph로 "풀어서" 사실상 삭제
+          //    - 제목이 있으면 토글 밖(이전 블록 쪽)으로 커서 이동
+          if (event.key === "Backspace" && inTitleParagraph && atStartOfTitle) {
+            event.preventDefault();
+            let tr = state.tr;
+            if (titleEmpty) {
+              // 토글 전체를 일반 paragraph로 교체(노션 느낌의 "토글 삭제")
+              const replacement = state.schema.nodes.paragraph.create();
+              tr = tr.replaceWith(togglePos, togglePos + toggleNode.nodeSize, replacement);
+              const cursorPos = Math.min(tr.doc.content.size, togglePos + 1);
+              tr = tr.setSelection(TextSelection.near(tr.doc.resolve(cursorPos)));
+            } else {
+              // 토글 밖으로 커서 이동 (토글 앞쪽으로)
+              const safePos = Math.max(0, togglePos);
+              tr = tr.setSelection(TextSelection.near(tr.doc.resolve(safePos), -1));
+            }
+            view.dispatch(tr);
+            return true;
+          }
+        }
+        
         // 백틱(`) 입력 시 ``` 패턴 감지하여 코드블록 생성
         if (event.key === "`") {
           const blockStart = $from.start($from.depth);
