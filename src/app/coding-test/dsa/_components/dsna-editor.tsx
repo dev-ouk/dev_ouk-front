@@ -254,6 +254,25 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
   const [emojiCoords, setEmojiCoords] = useState<{ left: number; top: number } | null>(null);
   const [emojiResults, setEmojiResults] = useState<typeof EMOJIS>([]);
   const editorRef = useRef<HTMLDivElement>(null);
+  
+  // ✅ 핸들 오버레이 상태
+  type HandleState = {
+    visible: boolean;
+    x: number;     // editorRef 기준 상대좌표
+    y: number;     // editorRef 기준 상대좌표
+    nodePos: number | null; // PM node pos (드래그/클릭에 활용 가능)
+    height: number;
+  };
+  const [handle, setHandle] = useState<HandleState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    nodePos: null,
+    height: 24,
+  });
+  const handleRef = useRef<HTMLButtonElement>(null);
+  const lastNodePosRef = useRef<number | null>(null);
+  const rafRef = useRef<number>(0);
 
   const editor = useEditor({
     extensions: [
@@ -825,94 +844,111 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     setEmojiResults([]);
   };
 
-  // 핸들 hover 효과
+  // ✅ 핸들 오버레이 - ProseMirror API 기반 안정 버전
   useEffect(() => {
     if (!editor || !editorRef.current) return;
 
-    const editorElement = editorRef.current;
-    let rafId: number | null = null;
+    const root = editorRef.current;
+    const view = editor.view;
 
-    const handleMouseMove = (event: MouseEvent) => {
-      // requestAnimationFrame으로 성능 최적화 및 안정성 향상
-      if (rafId) {
-        cancelAnimationFrame(rafId);
+    const pickBlockNodePos = (pos: number) => {
+      const $pos = view.state.doc.resolve(pos);
+      // 1) 리스트 아이템이면 listItem을 블록으로
+      for (let d = $pos.depth; d > 0; d--) {
+        const n = $pos.node(d);
+        if (n.type.name === "listItem") {
+          return $pos.before(d);
+        }
+      }
+      // 2) 아니면 top-level 블록(= doc의 직접 자식)
+      //    (heading/paragraph/pre/hr/div 등)
+      if ($pos.depth >= 1) return $pos.before(1);
+      return null;
+    };
+
+    const updateByClientPoint = (clientX: number, clientY: number) => {
+      // ✅ 마우스가 핸들 위에 있으면 숨기지 말고 유지 (깜빡임 방지)
+      const ht = handleRef.current;
+      if (ht) {
+        const r = ht.getBoundingClientRect();
+        if (
+          clientX >= r.left &&
+          clientX <= r.right &&
+          clientY >= r.top &&
+          clientY <= r.bottom
+        ) {
+          return;
+        }
       }
 
-      rafId = requestAnimationFrame(() => {
-        const mouseX = event.clientX;
-        const mouseY = event.clientY;
+      const coords = view.posAtCoords({ left: clientX, top: clientY });
+      if (!coords) {
+        lastNodePosRef.current = null;
+        setHandle((h) => ({ ...h, visible: false, nodePos: null }));
+        return;
+      }
 
-        // 모든 블록 체크
-        const allBlocks = editorElement.querySelectorAll(
-          ".ProseMirror li, .ProseMirror > *:not(ul):not(ol)"
-        );
+      const nodePos = pickBlockNodePos(coords.pos);
+      if (nodePos == null) {
+        lastNodePosRef.current = null;
+        setHandle((h) => ({ ...h, visible: false, nodePos: null }));
+        return;
+      }
 
-        allBlocks.forEach((block) => {
-          const rect = block.getBoundingClientRect();
-          const isListItem = block.tagName === "LI";
-          
-          // 블록이 화면에 보이는지 확인
-          if (rect.width === 0 || rect.height === 0) return;
-          
-          // 일반 블록: 핸들 버튼 위치는 left: 0.5rem (블록의 padding 영역 안)
-          // 리스트 아이템: 핸들 버튼 위치는 left: -1.3rem
-          let handleAreaLeft: number;
-          if (isListItem) {
-            // 리스트 아이템: 블록의 왼쪽에서 -1.3rem 위치
-            handleAreaLeft = rect.left - 20.8; // -1.3rem ≈ -20.8px
-          } else {
-            // 일반 블록: margin-left: -2.5rem이 적용되어 있으므로, 
-            // 핸들은 실제로 rect.left + 0.5rem 위치
-            handleAreaLeft = rect.left + 8; // 0.5rem ≈ 8px
-          }
-          
-          const handleAreaRight = handleAreaLeft + 20; // 1.25rem ≈ 20px
-          const handleCenterY = rect.top + (rect.height / 2);
-          const handleAreaTop = handleCenterY - 12; // 버튼 높이의 절반
-          const handleAreaBottom = handleCenterY + 12;
-          
-          // 핸들 버튼 영역에 마우스가 있는지 확인
-          const isInHandleArea = 
-            mouseX >= handleAreaLeft &&
-            mouseX < handleAreaRight &&
-            mouseY >= handleAreaTop &&
-            mouseY <= handleAreaBottom;
-          
-          // 현재 블록이 hover 상태인지 확인 (핸들이 보이는 상태)
-          // elementFromPoint를 사용하여 더 정확하게 확인
-          const elementAtPoint = document.elementFromPoint(mouseX, mouseY);
-          const isBlockHovered = block.contains(elementAtPoint) || 
-                                 block === elementAtPoint ||
-                                 block.matches(":hover");
-          
-          // 블록이 hover 상태이고, 핸들 버튼 영역에 마우스가 있으면 handle-hover 클래스 추가
-          if (isBlockHovered && isInHandleArea) {
-            block.classList.add("handle-hover");
-          } else {
-            block.classList.remove("handle-hover");
-          }
-        });
+      // 동일 노드면 불필요 렌더 최소화
+      if (lastNodePosRef.current === nodePos && handle.visible) return;
+
+      lastNodePosRef.current = nodePos;
+
+      const dom = view.nodeDOM(nodePos) as HTMLElement | null;
+      if (!dom) {
+        setHandle((h) => ({ ...h, visible: false, nodePos: null }));
+        return;
+      }
+
+      const blockRect = dom.getBoundingClientRect();
+      const rootRect = root.getBoundingClientRect();
+
+      const HANDLE_W = 20;
+      const HANDLE_H = 24;
+      const LEFT_PAD = 8; // gutter 안쪽 여백(원하면 조절)
+
+      // root 기준 상대좌표로 변환
+      const x = blockRect.left - rootRect.left + LEFT_PAD;
+      const y = blockRect.top - rootRect.top + blockRect.height / 2 - HANDLE_H / 2;
+
+      setHandle({
+        visible: true,
+        x,
+        y,
+        nodePos,
+        height: HANDLE_H,
       });
     };
 
-    const handleMouseLeave = () => {
-      const allBlocks = editorElement.querySelectorAll(
-        ".ProseMirror li, .ProseMirror > *:not(ul):not(ol)"
-      );
-      allBlocks.forEach((block) => {
-        block.classList.remove("handle-hover");
-      });
+    const onMove = (e: PointerEvent) => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      const x = e.clientX;
+      const y = e.clientY;
+      rafRef.current = requestAnimationFrame(() => updateByClientPoint(x, y));
     };
 
-    // mousemove 이벤트를 더 자주 감지하도록 설정 (passive로 성능 최적화)
-    editorElement.addEventListener("mousemove", handleMouseMove, { passive: true });
-    editorElement.addEventListener("mouseleave", handleMouseLeave);
+    const onLeave = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      lastNodePosRef.current = null;
+      setHandle((h) => ({ ...h, visible: false, nodePos: null }));
+    };
+
+    root.addEventListener("pointermove", onMove, { passive: true });
+    root.addEventListener("pointerleave", onLeave);
 
     return () => {
-      editorElement.removeEventListener("mousemove", handleMouseMove);
-      editorElement.removeEventListener("mouseleave", handleMouseLeave);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      root.removeEventListener("pointermove", onMove);
+      root.removeEventListener("pointerleave", onLeave);
     };
-  }, [editor]);
+  }, [editor, handle.visible]);
 
   // Drag & Drop 기능 구현
   useEffect(() => {
@@ -1065,6 +1101,27 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         <EditorContent editor={editor} />
       </div>
 
+      {/* ✅ 핸들 오버레이 버튼 */}
+      {handle.visible && (
+        <button
+          ref={handleRef}
+          type="button"
+          className="dsna-block-handle"
+          style={{
+            left: handle.x,
+            top: handle.y,
+            height: handle.height,
+            width: 20,
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            editor?.chain().focus().run();
+          }}
+        >
+          ⋮⋮
+        </button>
+      )}
+
       {/* ✅ 이모지 자동완성 팝업 */}
       {emojiCoords && emojiResults.length > 0 && (
         <div
@@ -1119,135 +1176,47 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror > *:not(ul):not(ol):hover {
           background-color: #fbfbfb;
         }
-        /* 핸들 버튼 영역 - 블록 hover 시 블록 배경색과 같게 */
-        .dsna-editor.ProseMirror > *:not(ul):not(ol):hover::before {
-          content: "";
+        /* ✅ 핸들 오버레이 버튼 스타일 */
+        .dsna-block-handle {
           position: absolute;
-          left: 0.5rem;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 1.25rem;
-          height: 1.5rem;
-          background-color: #fbfbfb;
-          border-radius: 0.25rem;
-          pointer-events: none;
-          transition: background-color 0.15s ease;
-        }
-        /* 핸들 버튼에 hover 시 배경색 변경 (더 진하게) - 우선순위 높임 */
-        .dsna-editor.ProseMirror > *:not(ul):not(ol).handle-hover:hover::before,
-        .dsna-editor.ProseMirror > *:not(ul):not(ol).handle-hover::before {
-          background-color: #e4e4e7 !important;
-        }
-        /* 🔥 핸들 아이콘 (코드블록 포함) - 버튼 중앙에 배치 */
-        .dsna-editor.ProseMirror > *:not(ul):not(ol):hover::after {
-          content: "⋮⋮";
-          position: absolute;
-          left: 0.5rem;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 1.25rem;
-          height: 1.5rem;
+          z-index: 30;
           display: flex;
           align-items: center;
           justify-content: center;
+          border-radius: 0.25rem;
+          border: 1px solid transparent;
+          background: transparent;
           color: #a1a1aa;
           font-size: 0.875rem;
           line-height: 1;
           cursor: grab;
-          pointer-events: none;
-          transition: color 0.15s ease;
         }
-        /* 핸들 버튼에 hover 시 아이콘 색상 더 진하게 - 우선순위 높임 */
-        .dsna-editor.ProseMirror > *:not(ul):not(ol).handle-hover:hover::after,
-        .dsna-editor.ProseMirror > *:not(ul):not(ol).handle-hover::after {
-          color: #52525b !important;
+        .dsna-block-handle:hover {
+          background: #e4e4e7;
+          color: #52525b;
+          border-color: #e4e4e7;
         }
-        /* 리스트 컨테이너 기본 리셋 */
+        .dsna-block-handle:active {
+          cursor: grabbing;
+        }
+        /* ✅ 리스트는 marker를 사용 */
         .dsna-editor.ProseMirror ul,
         .dsna-editor.ProseMirror ol {
-          margin: 0;
-          padding: 0;
-          list-style: none;
-        }
-        /* 리스트 아이템 하나도 블록처럼 핸들 표시 */
-        .dsna-editor.ProseMirror li {
-          margin: 0.1em 0;
+          list-style: initial;
           padding-left: 1.5rem;
+          margin: 0;
+        }
+        /* ✅ li를 블록처럼 만들고, 핸들 영역까지 hover되도록 왼쪽 확장 */
+        .dsna-editor.ProseMirror li {
           position: relative;
-          display: block;
-          color: #171717;
+          margin: 0.1em 0;
+          padding-left: 2.5rem;
+          margin-left: -2.5rem;
           min-height: 1.4em;
-          background-color: transparent;
-        }
-        .dsna-editor.ProseMirror li::before {
-          content: "•";
-          position: absolute;
-          left: 0;
           color: #171717;
-          font-weight: bold;
-        }
-        .dsna-editor.ProseMirror ol {
-          counter-reset: list-counter;
-        }
-        .dsna-editor.ProseMirror ol li {
-          counter-increment: list-counter;
-        }
-        .dsna-editor.ProseMirror ol li::before {
-          content: counter(list-counter) ".";
-          position: absolute;
-          left: 0;
-          color: #171717;
-          font-weight: normal;
         }
         .dsna-editor.ProseMirror li:hover {
           background-color: #fbfbfb;
-        }
-        /* 리스트 아이템 핸들 버튼 배경 */
-        .dsna-editor.ProseMirror li:hover::before {
-          content: "";
-          position: absolute;
-          left: -1.3rem;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 1.25rem;
-          height: 1.5rem;
-          background-color: #fbfbfb;
-          border-radius: 0.25rem;
-          transition: background-color 0.15s ease;
-          z-index: 1;
-        }
-        /* 리스트 아이템 핸들 버튼에 hover 시 배경색 변경 (더 진하게) - 우선순위 높임 */
-        .dsna-editor.ProseMirror li.handle-hover:hover::before,
-        .dsna-editor.ProseMirror li.handle-hover::before {
-          background-color: #e4e4e7 !important;
-        }
-        /* 리스트 아이템 핸들 아이콘 - 버튼 중앙에 배치 */
-        .dsna-editor.ProseMirror li::after {
-          content: "⋮⋮";
-          position: absolute;
-          left: -1.3rem;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 1.25rem;
-          height: 1.5rem;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #a1a1aa;
-          font-size: 0.875rem;
-          line-height: 1;
-          cursor: grab;
-          opacity: 0;
-          transition: opacity 0.2s ease, color 0.15s ease;
-          z-index: 2;
-        }
-        .dsna-editor.ProseMirror li:hover::after {
-          opacity: 1;
-        }
-        /* 리스트 아이템 핸들 버튼에 hover 시 아이콘 색상 더 진하게 - 우선순위 높임 */
-        .dsna-editor.ProseMirror li.handle-hover:hover::after,
-        .dsna-editor.ProseMirror li.handle-hover::after {
-          color: #52525b !important;
         }
         .dsna-editor.ProseMirror > *:active {
           cursor: grabbing;
