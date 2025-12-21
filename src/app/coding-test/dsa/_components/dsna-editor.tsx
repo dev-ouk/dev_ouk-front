@@ -1037,6 +1037,23 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     // toggle 버튼(18) + gap(6) = 24px (CSS와 맞춰야 함)
     const TOGGLE_INDENT = 18 + 6;
 
+    // ✅ CSS var(--dsna-list-indent) 값을 px로 읽기 (없으면 fallback)
+    const readCssPx = (el: Element, varName: string, fallback: number) => {
+      const v = getComputedStyle(el).getPropertyValue(varName).trim();
+      if (!v) return fallback;
+
+      // 대부분 px로 떨어지지만 rem일 수도 있어서 처리
+      if (v.endsWith("px")) return parseFloat(v);
+      if (v.endsWith("rem")) {
+        const rootFont = parseFloat(getComputedStyle(document.documentElement).fontSize || "16");
+        return parseFloat(v) * rootFont;
+      }
+      return fallback;
+    };
+
+    // ✅ 리스트 중첩 한 단계당 indent(px)
+    const LIST_INDENT = readCssPx(view.dom, "--dsna-list-indent", 22);
+
     const pickBlockNodePos = (pos: number) => {
       const $pos = view.state.doc.resolve(pos);
       // 1) listItem이면 listItem을 블록 루트로 (토글 안/밖 상관없이 최우선)
@@ -1088,6 +1105,24 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       // toggle 노드 "자체"면 카운트에 자기 자신이 포함되므로 -1 (중첩 토글에서 핸들 indent 맞춤)
       const effective = isNodeItselfToggle ? Math.max(0, toggleCount - 1) : toggleCount;
       return effective * TOGGLE_INDENT;
+    };
+
+    // ✅ ✅ 추가: 리스트 중첩 indent
+    // - listItem이 "블록"이므로 listItem nesting level을 세면 됨
+    // - 최상위 리스트(level=1)는 0, 중첩(level=2)부터 LIST_INDENT씩 땡김
+    const calcListIndent = (nodePos: number) => {
+      const node = view.state.doc.nodeAt(nodePos);
+      if (!node) return 0;
+
+      const safe = Math.min(view.state.doc.content.size, nodePos + 1);
+      const $p = view.state.doc.resolve(safe);
+
+      let listItemLevel = 0;
+      for (let d = $p.depth; d > 0; d--) {
+        if ($p.node(d).type.name === "listItem") listItemLevel++;
+      }
+
+      return Math.max(0, listItemLevel - 1) * LIST_INDENT;
     };
 
     const getAnchorRect = (nodePos: number) => {
@@ -1227,7 +1262,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
 
       const y = anchorRect.top - rootRect.top + (lineH - HANDLE_H) / 2;
 
-      const indent = calcToggleIndent(nodePos);
+      // ✅ 여기만 변경: toggleIndent + listIndent
+      const indent = calcToggleIndent(nodePos) + calcListIndent(nodePos);
       const handleX = LEFT_PAD + BTN_W + GAP + indent;
 
       setHandle({
