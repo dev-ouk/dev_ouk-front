@@ -24,6 +24,11 @@ export default function DSAWritePage() {
   const [selectedTerms, setSelectedTerms] = useState<string[]>([]);
   const [isLoadingTerms, setIsLoadingTerms] = useState(true);
   const [termsError, setTermsError] = useState<string | null>(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewSlug, setPreviewSlug] = useState<string | null>(null);
+  const [isSlugAvailable, setIsSlugAvailable] = useState<boolean | null>(null);
+  const [isLoadingSlug, setIsLoadingSlug] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,13 +98,70 @@ export default function DSAWritePage() {
     router.back();
   };
 
-  const handleSubmit = () => {
-    // TODO: API 연동
-    console.log("제출:", {
+  const handlePreview = async () => {
+    if (!title.trim()) {
+      alert("제목을 입력해주세요.");
+      return;
+    }
+
+    setIsPreviewModalOpen(true);
+    setIsLoadingSlug(true);
+    setSlugError(null);
+    setPreviewSlug(null);
+    setIsSlugAvailable(null);
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      setSlugError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+      setIsLoadingSlug(false);
+      return;
+    }
+
+    try {
+      const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+      const response = await fetch(`${normalizedBaseUrl}/api/v1/algo-notes/slug-preview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title: title.trim() }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Slug 미리보기를 불러올 수 없습니다. (status: ${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        slug: string;
+        available: boolean;
+      };
+
+      setPreviewSlug(payload.slug);
+      setIsSlugAvailable(payload.available);
+    } catch (fetchError) {
+      setSlugError((fetchError as Error).message);
+    } finally {
+      setIsLoadingSlug(false);
+    }
+  };
+
+  const handlePreviewCancel = () => {
+    setIsPreviewModalOpen(false);
+    setPreviewSlug(null);
+    setIsSlugAvailable(null);
+    setSlugError(null);
+  };
+
+  const handlePreviewComplete = () => {
+    // TODO: 실제 생성 API 연동
+    console.log("작성 완료:", {
       title,
+      slug: previewSlug,
       content: editorContent,
       tagSlugs: selectedTerms,
     });
+    // 모달 닫기
+    handlePreviewCancel();
   };
 
   return (
@@ -243,14 +305,133 @@ export default function DSAWritePage() {
             </button>
             <button
               type="button"
-              onClick={handleSubmit}
+              onClick={handlePreview}
               className="rounded-xl bg-zinc-900 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
             >
-              저장
+              미리보기
             </button>
           </div>
         </div>
       </div>
+
+      {/* 미리보기 모달 */}
+      {isPreviewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+          >
+            <header className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                  DS&A
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold text-zinc-900">글 작성 미리보기</h2>
+                <p className="mt-2 text-sm text-zinc-600">
+                  작성 내용을 확인하고 완료하세요.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handlePreviewCancel}
+                aria-label="모달 닫기"
+                className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </header>
+
+            <div className="space-y-5 px-6 py-6">
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  제목
+                </label>
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900">
+                  {title || "(제목 없음)"}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Slug
+                </label>
+                {isLoadingSlug ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-500">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Slug를 생성하는 중...
+                  </div>
+                ) : slugError ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+                    {slugError}
+                  </div>
+                ) : previewSlug ? (
+                  <div className="space-y-2">
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 font-mono">
+                      {previewSlug}
+                    </div>
+                    {isSlugAvailable === false && (
+                      <p className="text-xs text-rose-500">
+                        ⚠️ 이 slug는 이미 사용 중입니다. 제목을 수정하면 다른 slug가 생성됩니다.
+                      </p>
+                    )}
+                    {isSlugAvailable === true && (
+                      <p className="text-xs text-emerald-600">
+                        ✓ 사용 가능한 slug입니다.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  선택된 태그
+                </label>
+                {selectedTerms.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-500">
+                    선택된 태그가 없습니다.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                    {selectedTerms.map((slug) => {
+                      const term = terms.find((item) => item.slug === slug);
+                      return (
+                        <span
+                          key={slug}
+                          className="inline-flex items-center rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white"
+                        >
+                          {term?.name ?? slug}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <footer className="flex flex-col gap-3 border-t border-zinc-200 px-6 py-5">
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handlePreviewCancel}
+                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePreviewComplete}
+                  disabled={isLoadingSlug || !previewSlug}
+                  className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                >
+                  작성 완료
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
     </SidebarLayout>
   );
 }
