@@ -373,6 +373,9 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
   const rafRef = useRef<number>(0);
   const dragFromHandleRef = useRef(false);
   const draggedNodePosRef = useRef<number | null>(null);
+  const draggingRef = useRef(false);
+  const overlayHoverRef = useRef(false);
+  const hoveredDomRef = useRef<HTMLElement | null>(null);
 
   const editor = useEditor({
     onCreate: ({ editor }) => {
@@ -725,6 +728,24 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         }
 
         return false;
+      },
+      handleDrop: (view, event) => {
+        if (dragFromHandleRef.current) {
+          event.preventDefault();
+          event.stopPropagation();
+          return true; // ✅ ProseMirror drop 처리 중단
+        }
+        return false;
+      },
+      handleDOMEvents: {
+        drop: (view, event) => {
+          if (dragFromHandleRef.current) {
+            event.preventDefault();
+            event.stopPropagation();
+            return true;
+          }
+          return false;
+        },
       },
     },
     onUpdate: ({ editor }: { editor: any }) => {
@@ -1150,7 +1171,17 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       return nodeDom.getBoundingClientRect();
     };
 
+    const setHoveredDom = (el: HTMLElement | null) => {
+      if (hoveredDomRef.current && hoveredDomRef.current !== el) {
+        hoveredDomRef.current.classList.remove("dsna-hovered");
+      }
+      hoveredDomRef.current = el;
+      if (el) el.classList.add("dsna-hovered");
+    };
+
     const updateByClientPoint = (clientX: number, clientY: number) => {
+      if (overlayHoverRef.current) return; // ✅ 핸들/+ 위면 위치 업데이트 금지(깜빡임 방지)
+
       // ✅ 마우스가 핸들이나 + 버튼 위면 유지 (깜빡임 방지)
       const isPointerOn = (el: HTMLElement | null) => {
         if (!el) return false;
@@ -1172,6 +1203,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
 
       if (!inside) {
         lastNodePosRef.current = null;
+        setHoveredDom(null);
         setHandle((h) => ({ ...h, visible: false, nodePos: null }));
         return;
       }
@@ -1250,8 +1282,13 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       if (lastNodePosRef.current === nodePos) return;
       lastNodePosRef.current = nodePos;
 
+      // ✅ nodePos가 결정되는 지점에서 dom 찾아서 hover 클래스 설정
+      const nodeDom = view.nodeDOM(nodePos) as HTMLElement | null;
+      setHoveredDom(nodeDom);
+
       const anchorRect = getAnchorRect(nodePos);
       if (!anchorRect) {
+        setHoveredDom(null);
         setHandle((h) => ({ ...h, visible: false, nodePos: null }));
         return;
       }
@@ -1278,6 +1315,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     };
 
     const onMove = (e: PointerEvent) => {
+      if (draggingRef.current) return; // ✅ 드래그 중엔 handle 추적 멈춤
+
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       const x = e.clientX;
       const y = e.clientY;
@@ -1285,6 +1324,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     };
 
     const onLeave = () => {
+      if (draggingRef.current) return; // ✅ 드래그 중엔 숨기지 마라
+
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
       lastNodePosRef.current = null;
@@ -1505,11 +1546,45 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     const onDrop = (e: DragEvent) => {
       if (!dragFromHandleRef.current) return;
       e.preventDefault();
+      e.stopPropagation();
 
       const dragPos = draggedNodePosRef.current;
       if (dragPos == null) return;
 
-      const coords = view.posAtCoords({ left: e.clientX, top: e.clientY });
+      const pmRect = view.dom.getBoundingClientRect();
+
+      // ✅ 좌표가 gutter/오버레이면 null 나오는 문제 해결: X를 안쪽으로 밀어 재시도
+      const posAtSafeCoords = (x: number, y: number) => {
+        let probeX = Math.min(Math.max(x, pmRect.left + 6), pmRect.right - 6);
+
+        for (let i = 0; i < 10; i++) {
+          const el = document.elementFromPoint(probeX, y) as HTMLElement | null;
+
+          if (!el || !view.dom.contains(el)) {
+            probeX = Math.min(pmRect.right - 6, probeX + 24);
+            continue;
+          }
+
+          if (el.closest(".dsna-toggle-btn")) {
+            probeX = Math.min(pmRect.right - 6, probeX + 28);
+            continue;
+          }
+
+          const tag = el.tagName;
+          if (tag === "LI" || tag === "UL" || tag === "OL") {
+            probeX = Math.min(pmRect.right - 6, probeX + 20);
+            continue;
+          }
+
+          const coords = view.posAtCoords({ left: probeX, top: y });
+          if (coords) return coords;
+
+          probeX = Math.min(pmRect.right - 6, probeX + 24);
+        }
+        return null;
+      };
+
+      const coords = posAtSafeCoords(e.clientX, e.clientY);
       if (!coords) return;
 
       const dropPos = pickBlockNodePos(coords.pos);
@@ -1536,34 +1611,52 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       // 자기 자신 내부로 드롭 방지
       if (dropPos > from && dropPos < to) return;
 
-      let insertPos = placeAfter ? (dropPos + dropNode.nodeSize) : dropPos;
+      const desiredInsert = placeAfter ? (dropPos + dropNode.nodeSize) : dropPos;
 
-      // 아래로 이동 시 delete로 좌표가 당겨지므로 보정
-      if (from < insertPos) insertPos -= draggedNode.nodeSize;
-
+      // ✅ 핵심: delete 이후 좌표 변형은 mapping으로 해결 (이게 제일 안정적)
       let tr = state.tr.delete(from, to);
-      tr = tr.insert(insertPos, draggedNode);
+      const mappedInsert = tr.mapping.map(desiredInsert);
+      tr = tr.insert(mappedInsert, draggedNode);
 
-      // 이동한 노드 선택
       try {
-        tr = tr.setSelection(NodeSelection.create(tr.doc, insertPos));
+        tr = tr.setSelection(NodeSelection.create(tr.doc, mappedInsert));
       } catch {}
 
       view.dispatch(tr);
       editor.commands.focus();
 
+      // ✅ 안전빵: drop에서 플래그 정리
+      overlayHoverRef.current = false;
+      draggingRef.current = false;
       dragFromHandleRef.current = false;
       draggedNodePosRef.current = null;
     };
 
-    root.addEventListener("dragover", onDragOver);
-    root.addEventListener("drop", onDrop);
+    // ✅ capture: true 로 먼저 가로채기
+    root.addEventListener("dragover", onDragOver, true);
+    root.addEventListener("drop", onDrop, true);
 
     return () => {
-      root.removeEventListener("dragover", onDragOver);
-      root.removeEventListener("drop", onDrop);
+      root.removeEventListener("dragover", onDragOver, true);
+      root.removeEventListener("drop", onDrop, true);
     };
-  }, [editor, handle.nodePos]);
+  }, [editor]);
+
+  // ✅ (보너스 안전빵) 드래그가 가끔 "끝났는데 dragend 안 오는" 케이스 방지
+  useEffect(() => {
+    const reset = () => {
+      overlayHoverRef.current = false;
+      draggingRef.current = false;
+      dragFromHandleRef.current = false;
+      draggedNodePosRef.current = null;
+    };
+    window.addEventListener("dragend", reset);
+    window.addEventListener("drop", reset);
+    return () => {
+      window.removeEventListener("dragend", reset);
+      window.removeEventListener("drop", reset);
+    };
+  }, []);
 
   if (!editor) {
     return null;
@@ -1587,6 +1680,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
             height: handle.height,
             width: 20,
           }}
+          onPointerEnter={() => (overlayHoverRef.current = true)}
+          onPointerLeave={() => (overlayHoverRef.current = false)}
           onMouseDown={(e) => {
             e.preventDefault(); // blur 방지
             insertBlockBelow();
@@ -1610,6 +1705,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
             height: handle.height,
             width: 20,
           }}
+          onPointerEnter={() => (overlayHoverRef.current = true)}
+          onPointerLeave={() => (overlayHoverRef.current = false)}
           onPointerDown={(e) => {
             // ✅ drag 막지 말고, 전파만 막기
             e.stopPropagation();
@@ -1642,6 +1739,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           onDragStart={(e) => {
             if (!editor) return;
 
+            draggingRef.current = true; // ✅ 락 ON
             dragFromHandleRef.current = true;
 
             // 지금 handle이 가리키는 블록 pos(토글 title은 토글 pos로 승격)
@@ -1669,11 +1767,29 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
               dispatch(state.tr.setSelection(NodeSelection.create(state.doc, targetPos)));
             } catch {}
 
-            // 드래그 데이터는 더미로라도 넣어줘야 브라우저가 drag로 인식함
+            // ✅ 드래그 인식용 데이터 (빈 문자열 금지)
+            e.dataTransfer?.setData("application/x-dsna-block", "1");
             e.dataTransfer?.setData("text/plain", "dsna-block");
+
+            // ✅ 드래그 이미지(없으면 어떤 브라우저는 drag가 불안정)
+            const img = document.createElement("div");
+            img.style.width = "160px";
+            img.style.height = "28px";
+            img.style.background = "rgba(24,24,27,0.06)";
+            img.style.border = "1px solid rgba(24,24,27,0.08)";
+            img.style.borderRadius = "8px";
+            img.style.position = "absolute";
+            img.style.top = "-9999px";
+            img.style.left = "-9999px";
+            document.body.appendChild(img);
+            e.dataTransfer?.setDragImage(img, 10, 14);
+            setTimeout(() => document.body.removeChild(img), 0);
+
             e.dataTransfer!.effectAllowed = "move";
           }}
           onDragEnd={() => {
+            overlayHoverRef.current = false;
+            draggingRef.current = false; // ✅ 락 OFF
             dragFromHandleRef.current = false;
             draggedNodePosRef.current = null;
           }}
@@ -1737,6 +1853,22 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         /* 배경색은 padding 영역(내용 부분)에만 적용되도록 */
         .dsna-editor.ProseMirror > *:not(ul):not(ol):hover {
           background-color: #fbfbfb;
+        }
+        /* ✅ 가터(핸들 영역) hover도 블록이 하이라이트되게 */
+        .dsna-editor.ProseMirror > *:not(ul):not(ol).dsna-hovered {
+          background-color: #fbfbfb;
+        }
+        /* ✅ 리스트는 마커까지 칠하려면 기존 ::after를 재활용 */
+        .dsna-editor.ProseMirror li.dsna-hovered::after {
+          background: #fbfbfb;
+        }
+        /* ✅ toggle title(토글 자체)에 클래스가 붙는 케이스 */
+        .dsna-editor.ProseMirror .dsna-toggle.dsna-hovered .dsna-toggle-content > :first-child {
+          background: #fbfbfb;
+        }
+        /* ✅ toggle body 블록(p/h1 등)에 직접 붙는 케이스 */
+        .dsna-editor.ProseMirror .dsna-toggle-content > *.dsna-hovered {
+          background: #fbfbfb;
         }
         /* ✅ 핸들 오버레이 버튼 스타일 */
         .dsna-block-handle {
