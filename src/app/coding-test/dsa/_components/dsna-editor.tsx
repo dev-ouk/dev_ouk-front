@@ -1027,35 +1027,42 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     editor.chain().focus().run();
   };
 
-  // ✅ 핸들 오버레이 - ProseMirror API 기반 안정 버전
+  // ✅ 핸들 오버레이 - Toggle 내부 줄 단위까지 정상 추적 버전
   useEffect(() => {
     if (!editor || !editorRef.current) return;
 
     const root = editorRef.current;
     const view = editor.view;
 
+    // toggle 버튼(18) + gap(6) = 24px (CSS와 맞춰야 함)
+    const TOGGLE_INDENT = 18 + 6;
+
     const pickBlockNodePos = (pos: number) => {
       const $pos = view.state.doc.resolve(pos);
-      // ✅ 0) toggle 내부면: 토글 자체를 블록 루트로 고정
+      // 1) listItem이면 listItem을 블록 루트로 (토글 안/밖 상관없이 최우선)
+      for (let d = $pos.depth; d > 0; d--) {
+        const n = $pos.node(d);
+        if (n.type.name === "listItem") return $pos.before(d);
+      }
+      // 2) toggle 안이면:
+      //    - 제목(첫 자식) hover: toggle 자체를 잡는다 (노션처럼 토글 줄 전체가 한 블록)
+      //    - 그 외(둘째 자식~) hover: 해당 "자식 블록"을 잡는다 (토글 내부 줄마다 핸들/플러스)
       for (let d = $pos.depth; d > 0; d--) {
         const n = $pos.node(d);
         if (n.type.name === "toggle") {
+          const childIndex = $pos.index(d); // toggle의 몇 번째 자식 안인지 (0=title)
+          if (childIndex === 0) return $pos.before(d);     // title => toggle node
+          // body => 해당 자식 블록 노드(보통 depth d+1)의 시작 pos
+          if ($pos.depth >= d + 1) return $pos.before(d + 1);
           return $pos.before(d);
         }
       }
-      // ✅ 1) listItem이면: listItem을 블록 루트로
-      for (let d = $pos.depth; d > 0; d--) {
-        const n = $pos.node(d);
-        if (n.type.name === "listItem") {
-          return $pos.before(d);
-        }
-      }
-      // ✅ 2) 아니면 top-level 블록(= doc의 직접 자식)
+      // 3) toggle/listItem이 아니면 top-level 블록(= doc의 직접 자식)
       if ($pos.depth >= 1) {
         const topPos = $pos.before(1);
         const topNode = view.state.doc.nodeAt(topPos);
         if (!topNode) return null;
-        // ul/ol 자체는 블록 취급 X (흔들림 방지)
+        // ul/ol 컨테이너는 블록 취급 X (흔들림 방지)
         if (topNode.type.name === "bulletList" || topNode.type.name === "orderedList") {
           return null;
         }
@@ -1064,22 +1071,57 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       return null;
     };
 
+    // ✅ 이 nodePos가 "toggle 안에서 얼마나 들어가 있는지"로 핸들 X 위치를 살짝 밀어줌
+    // - 바깥 블록: 0
+    // - 토글 body 안 블록: 1 * 24
+    // - 중첩 토글이면: N * 24
+    const calcToggleIndent = (nodePos: number) => {
+      // nodePos 바로 안쪽으로 resolve 해야 depth 탐색이 안정적
+      const safe = Math.min(view.state.doc.content.size, nodePos + 1);
+      const $p = view.state.doc.resolve(safe);
+      let toggleCount = 0;
+      for (let d = $p.depth; d > 0; d--) {
+        if ($p.node(d).type.name === "toggle") toggleCount++;
+      }
+      const node = view.state.doc.nodeAt(nodePos);
+      const isNodeItselfToggle = node?.type.name === "toggle";
+      // toggle 노드 "자체"면 카운트에 자기 자신이 포함되므로 -1 (중첩 토글에서 핸들 indent 맞춤)
+      const effective = isNodeItselfToggle ? Math.max(0, toggleCount - 1) : toggleCount;
+      return effective * TOGGLE_INDENT;
+    };
+
+    const getAnchorRect = (nodePos: number) => {
+      const nodeDom = view.nodeDOM(nodePos) as HTMLElement | null;
+      if (!nodeDom) return null;
+      const node = view.state.doc.nodeAt(nodePos);
+      if (!node) return nodeDom.getBoundingClientRect();
+
+      // ✅ toggle: 제목(첫 블록) 기준으로 Y 맞추기
+      if (node.type.name === "toggle") {
+        const titleEl = nodeDom.querySelector(
+          ".dsna-toggle-content > :first-child"
+        ) as HTMLElement | null;
+        return (titleEl ?? nodeDom).getBoundingClientRect();
+      }
+
+      // ✅ listItem: 첫 줄 paragraph 기준
+      if (node.type.name === "listItem") {
+        const p = nodeDom.querySelector(":scope > p") as HTMLElement | null;
+        return (p ?? nodeDom).getBoundingClientRect();
+      }
+
+      return nodeDom.getBoundingClientRect();
+    };
+
     const updateByClientPoint = (clientX: number, clientY: number) => {
-      // ✅ 마우스가 핸들이나 + 버튼 위에 있으면 숨기지 말고 유지 (깜빡임 방지)
+      // ✅ 마우스가 핸들이나 + 버튼 위면 유지 (깜빡임 방지)
       const isPointerOn = (el: HTMLElement | null) => {
         if (!el) return false;
         const r = el.getBoundingClientRect();
-        return (
-          clientX >= r.left &&
-          clientX <= r.right &&
-          clientY >= r.top &&
-          clientY <= r.bottom
-        );
+        return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
       };
-      
-      if (isPointerOn(handleRef.current) || isPointerOn(plusRef.current)) {
-        return;
-      }
+
+      if (isPointerOn(handleRef.current) || isPointerOn(plusRef.current)) return;
 
       const coords = view.posAtCoords({ left: clientX, top: clientY });
       if (!coords) {
@@ -1095,31 +1137,10 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         return;
       }
 
-      // 동일 노드면 불필요 렌더 최소화
-      if (lastNodePosRef.current === nodePos && handle.visible) return;
+      // 동일 노드면 렌더 최소화
+      if (lastNodePosRef.current === nodePos) return;
 
       lastNodePosRef.current = nodePos;
-
-      const getAnchorRect = (nodePos: number) => {
-        const nodeDom = view.nodeDOM(nodePos) as HTMLElement | null;
-        if (!nodeDom) return null;
-        const node = view.state.doc.nodeAt(nodePos);
-        if (!node) return nodeDom.getBoundingClientRect();
-
-        // ✅ toggle: 제목(첫 블록) 기준
-        if (node.type.name === "toggle") {
-          const titleEl = nodeDom.querySelector(".dsna-toggle-content > :first-child") as HTMLElement | null;
-          return (titleEl ?? nodeDom).getBoundingClientRect();
-        }
-
-        // ✅ listItem: 첫 줄 paragraph 기준
-        if (node.type.name === "listItem") {
-          const p = nodeDom.querySelector(":scope > p") as HTMLElement | null;
-          return (p ?? nodeDom).getBoundingClientRect();
-        }
-
-        return nodeDom.getBoundingClientRect();
-      };
 
       const anchorRect = getAnchorRect(nodePos);
       if (!anchorRect) {
@@ -1132,15 +1153,15 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       const BTN_W = 20;
       const GAP = 6;
       const LEFT_PAD = 8;
-      // ✅ 첫 줄 높이 기반(너무 작거나 크지 않게 clamp)
       const HANDLE_H = 24;
       const lineH = Math.max(18, Math.min(anchorRect.height, 28));
 
-      // ✅ y = "첫 줄(top)" 기준으로 배치
       const y = anchorRect.top - rootRect.top + (lineH - HANDLE_H) / 2;
-      
-      // x는 고정 gutter 기준
-      const handleX = LEFT_PAD + BTN_W + GAP;
+
+      // ✅ toggle 안쪽(중첩 포함)일수록 핸들/플러스 X를 오른쪽으로 밀기
+      const indent = calcToggleIndent(nodePos);
+      // 기존 레이아웃을 유지하면서 indent만 추가
+      const handleX = LEFT_PAD + BTN_W + GAP + indent;
 
       setHandle({
         visible: true,
@@ -1173,7 +1194,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerleave", onLeave);
     };
-  }, [editor, handle.visible]);
+  }, [editor]);
 
   // Drag & Drop 기능 구현
   useEffect(() => {
@@ -1782,6 +1803,24 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         /* 접힘 상태: 제목(첫 블록)만 남기고 나머지 숨김 */
         .dsna-toggle.is-collapsed .dsna-toggle-content > :nth-child(n + 2) {
           display: none;
+        }
+        /* ✅ toggle 내부 블록도 노션처럼 줄 hover 표시 */
+        .dsna-toggle-content > p,
+        .dsna-toggle-content > h1,
+        .dsna-toggle-content > h2,
+        .dsna-toggle-content > h3,
+        .dsna-toggle-content > pre,
+        .dsna-toggle-content > .dsna-hr-block {
+          position: relative;
+          border-radius: 0.25rem;
+        }
+        .dsna-toggle-content > p:hover,
+        .dsna-toggle-content > h1:hover,
+        .dsna-toggle-content > h2:hover,
+        .dsna-toggle-content > h3:hover,
+        .dsna-toggle-content > pre:hover,
+        .dsna-toggle-content > .dsna-hr-block:hover {
+          background: #fbfbfb;
         }
       `}</style>
     </div>
