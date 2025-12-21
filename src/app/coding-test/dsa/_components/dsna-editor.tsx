@@ -1120,10 +1120,82 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         const r = el.getBoundingClientRect();
         return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
       };
-
       if (isPointerOn(handleRef.current) || isPointerOn(plusRef.current)) return;
 
-      const coords = view.posAtCoords({ left: clientX, top: clientY });
+      const rootRect = root.getBoundingClientRect();
+
+      // ✅ root 밖이면 숨김
+      // (단, 왼쪽 가터 쪽은 약간 여유를 줘서 핸들로 이동할 때 pointerleave처럼 안 꺼지게)
+      const LEFT_LEEWAY = 120; // gutter + 여유
+      const inside =
+        clientX >= rootRect.left - LEFT_LEEWAY &&
+        clientX <= rootRect.right &&
+        clientY >= rootRect.top &&
+        clientY <= rootRect.bottom;
+
+      if (!inside) {
+        lastNodePosRef.current = null;
+        setHandle((h) => ({ ...h, visible: false, nodePos: null }));
+        return;
+      }
+
+      // ✅ 1) "핸들로 이동중" sticky: 현재 블록 유지 (노션 느낌의 핵심)
+      const last = lastNodePosRef.current;
+      if (last != null) {
+        const lastRect = getAnchorRect(last);
+        if (lastRect) {
+          const PAD_Y = 24;
+          const nearY = clientY >= lastRect.top - PAD_Y && clientY <= lastRect.bottom + PAD_Y;
+
+          // 🔥 커서가 텍스트 시작(left)보다 왼쪽으로 가면 = 핸들/가터로 이동 중
+          const headingToGutter = clientX < lastRect.left + 12;
+
+          if (nearY && headingToGutter) {
+            return; // ✅ last 블록 유지 → "도망" 사라짐
+          }
+        }
+      }
+
+      const pmRect = view.dom.getBoundingClientRect();
+
+      // ✅ 2) posAtCoords를 "텍스트 컬럼"에서 찍도록 X를 보정하는 헬퍼
+      const posAtSafeCoords = (x: number, y: number) => {
+        let probeX = Math.min(Math.max(x, pmRect.left + 6), pmRect.right - 6);
+
+        for (let i = 0; i < 10; i++) {
+          const el = document.elementFromPoint(probeX, y) as HTMLElement | null;
+
+          // ProseMirror 밖이면 오른쪽으로 밀어보기
+          if (!el || !view.dom.contains(el)) {
+            probeX = Math.min(pmRect.right - 6, probeX + 24);
+            continue;
+          }
+
+          // ✅ 토글 버튼 영역을 찍었으면 → 텍스트 컬럼으로 점프
+          if (el.closest(".dsna-toggle-btn")) {
+            probeX = Math.min(pmRect.right - 6, probeX + 28); // 18 + 6 + 여유
+            continue;
+          }
+
+          // ✅ 리스트 마커 쪽은 종종 LI/UL/OL 자체가 잡힘 → 텍스트 쪽으로 밀기
+          const tag = el.tagName;
+          if (tag === "LI" || tag === "UL" || tag === "OL") {
+            probeX = Math.min(pmRect.right - 6, probeX + 20);
+            continue;
+          }
+
+          const coords = view.posAtCoords({ left: probeX, top: y });
+          if (coords) return coords;
+
+          probeX = Math.min(pmRect.right - 6, probeX + 24);
+        }
+
+        return null;
+      };
+
+      let coords = posAtSafeCoords(clientX, clientY);
+
+      // coords 못 구하면 숨김
       if (!coords) {
         lastNodePosRef.current = null;
         setHandle((h) => ({ ...h, visible: false, nodePos: null }));
@@ -1139,7 +1211,6 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
 
       // 동일 노드면 렌더 최소화
       if (lastNodePosRef.current === nodePos) return;
-
       lastNodePosRef.current = nodePos;
 
       const anchorRect = getAnchorRect(nodePos);
@@ -1147,8 +1218,6 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         setHandle((h) => ({ ...h, visible: false, nodePos: null }));
         return;
       }
-
-      const rootRect = root.getBoundingClientRect();
 
       const BTN_W = 20;
       const GAP = 6;
@@ -1158,9 +1227,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
 
       const y = anchorRect.top - rootRect.top + (lineH - HANDLE_H) / 2;
 
-      // ✅ toggle 안쪽(중첩 포함)일수록 핸들/플러스 X를 오른쪽으로 밀기
       const indent = calcToggleIndent(nodePos);
-      // 기존 레이아웃을 유지하면서 indent만 추가
       const handleX = LEFT_PAD + BTN_W + GAP + indent;
 
       setHandle({
