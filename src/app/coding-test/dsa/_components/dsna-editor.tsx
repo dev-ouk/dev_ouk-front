@@ -371,6 +371,8 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
   const plusRef = useRef<HTMLButtonElement>(null);
   const lastNodePosRef = useRef<number | null>(null);
   const rafRef = useRef<number>(0);
+  const dragFromHandleRef = useRef(false);
+  const draggedNodePosRef = useRef<number | null>(null);
 
   const editor = useEditor({
     onCreate: ({ editor }) => {
@@ -1440,6 +1442,129 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
     };
   }, [editor]);
 
+  // ✅ 핸들 드래그 전용 DnD (오버레이 handle에서 드래그할 때)
+  useEffect(() => {
+    if (!editor || !editorRef.current) return;
+
+    const root = editorRef.current;
+    const view = editor.view;
+
+    const pickBlockNodePos = (pos: number) => {
+      const $pos = view.state.doc.resolve(pos);
+
+      // listItem 우선
+      for (let d = $pos.depth; d > 0; d--) {
+        if ($pos.node(d).type.name === "listItem") return $pos.before(d);
+      }
+      // toggle: title면 toggle 자체, body면 해당 자식 블록
+      for (let d = $pos.depth; d > 0; d--) {
+        const n = $pos.node(d);
+        if (n.type.name === "toggle") {
+          const childIndex = $pos.index(d);
+          if (childIndex === 0) return $pos.before(d);
+          if ($pos.depth >= d + 1) return $pos.before(d + 1);
+          return $pos.before(d);
+        }
+      }
+      // top-level block
+      if ($pos.depth >= 1) {
+        const topPos = $pos.before(1);
+        const topNode = view.state.doc.nodeAt(topPos);
+        if (!topNode) return null;
+        if (topNode.type.name === "bulletList" || topNode.type.name === "orderedList") return null;
+        return topPos;
+      }
+      return null;
+    };
+
+    const getAnchorRect = (nodePos: number) => {
+      const nodeDom = view.nodeDOM(nodePos) as HTMLElement | null;
+      if (!nodeDom) return null;
+      const node = view.state.doc.nodeAt(nodePos);
+      if (!node) return nodeDom.getBoundingClientRect();
+
+      if (node.type.name === "toggle") {
+        const titleEl = nodeDom.querySelector(".dsna-toggle-content > :first-child") as HTMLElement | null;
+        return (titleEl ?? nodeDom).getBoundingClientRect();
+      }
+
+      if (node.type.name === "listItem") {
+        const p = nodeDom.querySelector(":scope > p") as HTMLElement | null;
+        return (p ?? nodeDom).getBoundingClientRect();
+      }
+
+      return nodeDom.getBoundingClientRect();
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (!dragFromHandleRef.current) return;
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = "move";
+    };
+
+    const onDrop = (e: DragEvent) => {
+      if (!dragFromHandleRef.current) return;
+      e.preventDefault();
+
+      const dragPos = draggedNodePosRef.current;
+      if (dragPos == null) return;
+
+      const coords = view.posAtCoords({ left: e.clientX, top: e.clientY });
+      if (!coords) return;
+
+      const dropPos = pickBlockNodePos(coords.pos);
+      if (dropPos == null) return;
+      if (dropPos === dragPos) return;
+
+      const state = view.state;
+      const draggedNode = state.doc.nodeAt(dragPos);
+      const dropNode = state.doc.nodeAt(dropPos);
+      if (!draggedNode || !dropNode) return;
+
+      // li ↔ li, 블록 ↔ 블록만 허용(기존 정책 유지)
+      const isDraggedLI = draggedNode.type.name === "listItem";
+      const isDropLI = dropNode.type.name === "listItem";
+      if (isDraggedLI !== isDropLI) return;
+
+      // 위/아래 판단(노션 느낌)
+      const r = getAnchorRect(dropPos);
+      const placeAfter = r ? e.clientY > (r.top + r.height / 2) : false;
+
+      const from = dragPos;
+      const to = dragPos + draggedNode.nodeSize;
+
+      // 자기 자신 내부로 드롭 방지
+      if (dropPos > from && dropPos < to) return;
+
+      let insertPos = placeAfter ? (dropPos + dropNode.nodeSize) : dropPos;
+
+      // 아래로 이동 시 delete로 좌표가 당겨지므로 보정
+      if (from < insertPos) insertPos -= draggedNode.nodeSize;
+
+      let tr = state.tr.delete(from, to);
+      tr = tr.insert(insertPos, draggedNode);
+
+      // 이동한 노드 선택
+      try {
+        tr = tr.setSelection(NodeSelection.create(tr.doc, insertPos));
+      } catch {}
+
+      view.dispatch(tr);
+      editor.commands.focus();
+
+      dragFromHandleRef.current = false;
+      draggedNodePosRef.current = null;
+    };
+
+    root.addEventListener("dragover", onDragOver);
+    root.addEventListener("drop", onDrop);
+
+    return () => {
+      root.removeEventListener("dragover", onDragOver);
+      root.removeEventListener("drop", onDrop);
+    };
+  }, [editor, handle.nodePos]);
+
   if (!editor) {
     return null;
   }
@@ -1477,6 +1602,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         <button
           ref={handleRef}
           type="button"
+          draggable
           className="dsna-block-handle"
           style={{
             left: handle.x,
@@ -1484,16 +1610,72 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
             height: handle.height,
             width: 20,
           }}
-          onMouseDown={(e) => {
-            e.preventDefault();
+          onPointerDown={(e) => {
+            // ✅ drag 막지 말고, 전파만 막기
+            e.stopPropagation();
+
             if (!editor) return;
-            const nodePos = handle.nodePos;
-            if (nodePos == null) return;
             const { state, dispatch } = editor.view;
-            const node = state.doc.nodeAt(nodePos);
-            if (!node) return;
-            dispatch(state.tr.setSelection(NodeSelection.create(state.doc, nodePos)));
-            editor.commands.focus();
+
+            const rawPos = handle.nodePos;
+            if (rawPos == null) return;
+
+            // ✅ 토글 title이면 토글 노드 pos로 승격
+            const safe = Math.min(state.doc.content.size, rawPos + 1);
+            const $pos = state.doc.resolve(safe);
+
+            let targetPos = rawPos;
+            for (let d = $pos.depth; d > 0; d--) {
+              const n = $pos.node(d);
+              if (n.type.name === "toggle") {
+                const childIndex = $pos.index(d);
+                if (childIndex === 0) targetPos = $pos.before(d);
+                break;
+              }
+            }
+
+            try {
+              dispatch(state.tr.setSelection(NodeSelection.create(state.doc, targetPos)));
+              requestAnimationFrame(() => editor.commands.focus());
+            } catch {}
+          }}
+          onDragStart={(e) => {
+            if (!editor) return;
+
+            dragFromHandleRef.current = true;
+
+            // 지금 handle이 가리키는 블록 pos(토글 title은 토글 pos로 승격)
+            const { state, dispatch } = editor.view;
+            const rawPos = handle.nodePos;
+            if (rawPos == null) return;
+
+            const safe = Math.min(state.doc.content.size, rawPos + 1);
+            const $pos = state.doc.resolve(safe);
+
+            let targetPos = rawPos;
+            for (let d = $pos.depth; d > 0; d--) {
+              const n = $pos.node(d);
+              if (n.type.name === "toggle") {
+                const childIndex = $pos.index(d);
+                if (childIndex === 0) targetPos = $pos.before(d);
+                break;
+              }
+            }
+
+            draggedNodePosRef.current = targetPos;
+
+            // 드래그 중에도 선택 상태 유지
+            try {
+              dispatch(state.tr.setSelection(NodeSelection.create(state.doc, targetPos)));
+            } catch {}
+
+            // 드래그 데이터는 더미로라도 넣어줘야 브라우저가 drag로 인식함
+            e.dataTransfer?.setData("text/plain", "dsna-block");
+            e.dataTransfer!.effectAllowed = "move";
+          }}
+          onDragEnd={() => {
+            dragFromHandleRef.current = false;
+            draggedNodePosRef.current = null;
           }}
           title="블록 선택/드래그"
         >
@@ -1667,7 +1849,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         .dsna-editor.ProseMirror > *:not(ul):not(ol).ProseMirror-selectednode::before {
           content: "";
           position: absolute;
-          left: var(--dsna-gutter);   /* ✅ 핸들/+/:: 영역 제외 */
+          left: 0;   /* ✅ 이미 블록 자체가 gutter를 포함하도록 확장되어 있음 */
           right: 0;
           top: -0.05rem;
           bottom: -0.05rem;
@@ -1710,6 +1892,44 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           background: var(--dsna-select-bg);
           border: 1px solid var(--dsna-select-border);
           box-shadow: var(--dsna-select-shadow);
+        }
+        /* ✅ Toggle 자체 선택 표시 (노션처럼) */
+        .dsna-editor.ProseMirror .dsna-toggle.ProseMirror-selectednode {
+          position: relative;
+          z-index: 0;
+        }
+        .dsna-editor.ProseMirror .dsna-toggle.ProseMirror-selectednode::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: -0.05rem;
+          bottom: -0.05rem;
+          background: var(--dsna-select-bg);
+          border: 1px solid var(--dsna-select-border);
+          border-radius: 0.45rem;
+          box-shadow: var(--dsna-select-shadow);
+          pointer-events: none;
+          z-index: -1;
+        }
+        /* ✅ Toggle 내부 블록 선택 표시(필요하면) */
+        .dsna-editor.ProseMirror .dsna-toggle-content > *.ProseMirror-selectednode {
+          position: relative;
+          z-index: 0;
+        }
+        .dsna-editor.ProseMirror .dsna-toggle-content > *.ProseMirror-selectednode::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: -0.05rem;
+          bottom: -0.05rem;
+          background: var(--dsna-select-bg);
+          border: 1px solid var(--dsna-select-border);
+          border-radius: 0.35rem;
+          box-shadow: var(--dsna-select-shadow);
+          pointer-events: none;
+          z-index: -1;
         }
         .dsna-editor.ProseMirror > *:active {
           cursor: grabbing;
