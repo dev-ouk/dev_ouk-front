@@ -11,14 +11,40 @@
  * - ProseMirror 기반으로 안정적이고 성숙한 라이브러리
  */
 
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { Node, mergeAttributes } from "@tiptap/core";
 import { TextSelection, NodeSelection } from "prosemirror-state";
 import { useEffect, useState, useRef } from "react";
+import { createLowlight } from "lowlight";
+import { CodeBlockNodeView } from "./CodeBlockNodeView";
+import "highlight.js/styles/github.css";
+
+// ✅ 필요한 언어만 등록(가벼움)
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import json from "highlight.js/lib/languages/json";
+import xml from "highlight.js/lib/languages/xml";
+import css from "highlight.js/lib/languages/css";
+import bash from "highlight.js/lib/languages/bash";
+import java from "highlight.js/lib/languages/java";
+import python from "highlight.js/lib/languages/python";
+import sql from "highlight.js/lib/languages/sql";
+
+const lowlight = createLowlight();
+lowlight.register("javascript", javascript);
+lowlight.register("typescript", typescript);
+lowlight.register("json", json);
+lowlight.register("xml", xml);
+lowlight.register("css", css);
+lowlight.register("bash", bash);
+lowlight.register("java", java);
+lowlight.register("python", python);
+lowlight.register("sql", sql);
 
 export type DsnaEditorProps = {
   initialContent?: any; // Tiptap JSON 형식
@@ -389,8 +415,19 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         },
         // ✅ StarterKit 안의 기본 horizontalRule은 끄고
         horizontalRule: false,
+        // ✅ 기본 codeBlock 끄기 (CodeBlockLowlight로 교체)
+        codeBlock: false,
       }),
       ToggleBlock, // ✅ Toggle Block 추가
+      // ✅ 노션 스타일 CodeBlock (언어 선택 + Copy 버튼)
+      CodeBlockLowlight.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(CodeBlockNodeView);
+        },
+      }).configure({
+        lowlight,
+        defaultLanguage: null, // 노션처럼 기본은 plain
+      }),
       // ✅ 따로 HorizontalRule 추가 (블록용 클래스를 붙이기 위해)
       HorizontalRule.extend({
         draggable: true, // 드래그도 블록처럼
@@ -2131,8 +2168,61 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           font-size: 0.875em;
           color: #dc2626;
         }
-        /* 🔥 코드블록 wrapper (여기에 핸들 붙음) */
-        .dsna-editor.ProseMirror pre {
+        /* === Notion-like CodeBlock === */
+        .dsna-codeblock {
+          border: 1px solid #e4e4e7;
+          background: #f7f6f3;          /* 노션 느낌 베이지/오프화이트 */
+          border-radius: 0.75rem;
+          overflow: hidden;
+          margin: 0.65rem 0;
+        }
+        /* 헤더 */
+        .dsna-codeblock-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.5rem;
+          padding: 0.45rem 0.6rem;
+          background: rgba(0,0,0,0.03);
+          border-bottom: 1px solid rgba(0,0,0,0.06);
+        }
+        .dsna-codeblock-select {
+          font-size: 12px;
+          padding: 0.25rem 0.45rem;
+          border-radius: 0.5rem;
+          border: 1px solid rgba(0,0,0,0.10);
+          background: white;
+          color: #27272a;
+          outline: none;
+        }
+        .dsna-codeblock-copy {
+          font-size: 12px;
+          padding: 0.25rem 0.5rem;
+          border-radius: 0.5rem;
+          border: 1px solid transparent;
+          color: #52525b;
+          background: transparent;
+          cursor: pointer;
+        }
+        .dsna-codeblock-copy:hover {
+          background: rgba(0,0,0,0.06);
+          border-color: rgba(0,0,0,0.06);
+          color: #27272a;
+        }
+        /* 본문 */
+        .dsna-codeblock-pre {
+          margin: 0;
+          padding: 0.8rem 0.9rem;
+          overflow: auto;
+        }
+        .dsna-codeblock-code {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+          font-size: 13px;
+          line-height: 1.65;
+          white-space: pre;
+        }
+        /* 🔥 코드블록 wrapper (기존 일반 pre, CodeBlockLowlight가 아닌 경우) */
+        .dsna-editor.ProseMirror pre:not(.dsna-codeblock-pre) {
           background-color: #f4f4f5;
           padding: 1rem;
           border-radius: 0.5rem;
@@ -2141,7 +2231,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           overflow: visible; /* ← 여기서 더 이상 자르지 않음 */
         }
         /* 실제 스크롤은 code가 담당 */
-        .dsna-editor.ProseMirror pre code {
+        .dsna-editor.ProseMirror pre:not(.dsna-codeblock-pre) code {
           display: block;
           background-color: transparent;
           padding: 0;

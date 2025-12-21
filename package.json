@@ -9,10 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tiptap/extension-code-block-lowlight": "^3.14.0",
     "@tiptap/extension-link": "^2.1.13",
     "@tiptap/extension-placeholder": "^2.1.13",
     "@tiptap/react": "^2.1.13",
     "@tiptap/starter-kit": "^2.1.13",
+    "highlight.js": "^11.11.1",
+    "lowlight": "^3.3.0",
     "lucide-react": "^0.553.0",
     "next": "16.0.1",
     "prism-themes": "^1.9.0",
