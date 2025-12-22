@@ -29,6 +29,8 @@ export default function DSAWritePage() {
   const [isSlugAvailable, setIsSlugAvailable] = useState<boolean | null>(null);
   const [isLoadingSlug, setIsLoadingSlug] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,6 +106,11 @@ export default function DSAWritePage() {
       return;
     }
 
+    if (!editorContent || !editorContent.json) {
+      alert("본문을 입력해주세요.");
+      return;
+    }
+
     setIsPreviewModalOpen(true);
     setIsLoadingSlug(true);
     setSlugError(null);
@@ -150,18 +157,87 @@ export default function DSAWritePage() {
     setPreviewSlug(null);
     setIsSlugAvailable(null);
     setSlugError(null);
+    setSubmitError(null);
+    setIsSubmitting(false);
   };
 
-  const handlePreviewComplete = () => {
-    // TODO: 실제 생성 API 연동
-    console.log("작성 완료:", {
-      title,
-      slug: previewSlug,
-      content: editorContent,
-      tagSlugs: selectedTerms,
-    });
-    // 모달 닫기
-    handlePreviewCancel();
+  const handlePreviewComplete = async () => {
+    if (!previewSlug || !editorContent) {
+      setSubmitError("필수 정보가 누락되었습니다.");
+      return;
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      setSubmitError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+      const response = await fetch(`${normalizedBaseUrl}/api/v1/algo-notes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          slug: previewSlug,
+          contentJson: editorContent.json,
+          contentHtml: editorContent.html,
+          contentText: editorContent.text,
+          status: "DRAFT",
+          isPublic: false,
+          isPin: false,
+          tagSlugs: selectedTerms,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as {
+          message?: string;
+          correlationId?: string;
+        };
+
+        let errorMessage = errorData.message || "글 작성에 실패했습니다.";
+
+        // 상태 코드별 에러 메시지 처리
+        if (response.status === 400) {
+          errorMessage = `입력 정보가 올바르지 않습니다. ${errorMessage}`;
+        } else if (response.status === 409) {
+          errorMessage = `이미 사용 중인 slug입니다. 제목을 수정해주세요. ${errorMessage}`;
+        } else if (response.status === 404) {
+          errorMessage = `태그를 찾을 수 없습니다. ${errorMessage}`;
+        } else if (response.status >= 500) {
+          errorMessage = `서버 오류가 발생했습니다. ${errorMessage}`;
+        }
+
+        if (errorData.correlationId) {
+          errorMessage += ` (ID: ${errorData.correlationId})`;
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const result = (await response.json()) as {
+        slug: string;
+        title: string;
+        status: string;
+      };
+
+      // 성공 시 모달 닫고 리다이렉트 (또는 목록으로 이동)
+      handlePreviewCancel();
+      // TODO: 상세 페이지로 리다이렉트하거나 목록으로 이동
+      // router.push(`/coding-test/dsa/${result.slug}`);
+      router.push("/coding-test/dsa");
+    } catch (fetchError) {
+      setSubmitError((fetchError as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -411,21 +487,34 @@ export default function DSAWritePage() {
             </div>
 
             <footer className="flex flex-col gap-3 border-t border-zinc-200 px-6 py-5">
+              {submitError ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
+                  <p className="font-medium">{submitError}</p>
+                </div>
+              ) : null}
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={handlePreviewCancel}
-                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+                  disabled={isSubmitting}
+                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   취소
                 </button>
                 <button
                   type="button"
                   onClick={handlePreviewComplete}
-                  disabled={isLoadingSlug || !previewSlug}
+                  disabled={isLoadingSlug || !previewSlug || isSubmitting || !editorContent}
                   className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
                 >
-                  작성 완료
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      작성 중...
+                    </>
+                  ) : (
+                    "작성 완료"
+                  )}
                 </button>
               </div>
             </footer>
