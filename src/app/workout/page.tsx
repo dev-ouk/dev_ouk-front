@@ -242,7 +242,7 @@ export default function WorkoutPage() {
 
   return (
     <SidebarLayout>
-      <div className="flex flex-1 flex-col">
+      <div className="mx-auto w-full max-w-4xl">
         <div className="flex flex-col gap-8">
           <div className="rounded-3xl border border-zinc-200 bg-white/80 px-8 py-7 shadow-sm backdrop-blur">
             <div className="flex flex-wrap items-start justify-between gap-6">
