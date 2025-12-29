@@ -3,7 +3,17 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, Loader2, Search, X, XCircle } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Flame,
+  Loader2,
+  Search,
+  Target,
+  TrendingUp,
+  X,
+  XCircle,
+} from "lucide-react";
 
 type Problem = {
   site: string;
@@ -282,7 +292,7 @@ export default function CodingTestPage() {
 
   return (
     <>
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="mx-auto w-full max-w-7xl">
         <header>
           <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Coding Test
@@ -295,6 +305,207 @@ export default function CodingTestPage() {
             응답을 기반으로 최근 코딩 테스트 풀이 내역을 보여줍니다.
           </p>
         </header>
+
+        {/* 통계 섹션 */}
+        {activeTab === "problems" && (
+          <div className="mt-8 space-y-6">
+            {/* 통계 카드 그리드 */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {/* 백준 티어 카드 */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      백준 티어
+                    </p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <Image
+                        src="https://static.solved.ac/tier_small/15.svg"
+                        alt="Gold 5"
+                        width={40}
+                        height={40}
+                        className="h-10 w-10"
+                        unoptimized
+                      />
+                      <div>
+                        <p className="text-lg font-bold text-zinc-900">Gold 5</p>
+                        <p className="text-xs text-zinc-500">상위 12.3%</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50">
+                    <Target className="h-6 w-6 text-amber-600" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 스트릭 카드 */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      연속 풀이
+                    </p>
+                    <p className="mt-3 text-3xl font-bold text-zinc-900">7일</p>
+                    <p className="text-xs text-zinc-500">최고 기록: 42일</p>
+                  </div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50">
+                    <Flame className="h-6 w-6 text-orange-600" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 총 문제 수 카드 */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      총 문제 수
+                    </p>
+                    <p className="mt-3 text-3xl font-bold text-zinc-900">
+                      {problems.length}
+                    </p>
+                    <p className="text-xs text-zinc-500">이번 달: +12</p>
+                  </div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50">
+                    <TrendingUp className="h-6 w-6 text-blue-600" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 정답률 카드 */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      정답률
+                    </p>
+                    <p className="mt-3 text-3xl font-bold text-zinc-900">78%</p>
+                    <p className="text-xs text-zinc-500">정답: 45 / 오답: 13</p>
+                  </div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50">
+                    <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 잔디밭과 추가 통계를 가로로 배치 */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {/* 잔디밭 (Contribution Graph) - 2열 차지 */}
+              <div className="lg:col-span-2 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">풀이 활동</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      지난 1년간의 문제 풀이 기록
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-zinc-900">156일</p>
+                    <p className="text-xs text-zinc-500">총 풀이일</p>
+                  </div>
+                </div>
+                <div className="flex items-end gap-1 overflow-x-auto pb-2">
+                  {Array.from({ length: 53 }, (_, i) => {
+                    const level = Math.floor(Math.random() * 5);
+                    const colors = [
+                      "bg-zinc-100",
+                      "bg-emerald-200",
+                      "bg-emerald-400",
+                      "bg-emerald-600",
+                      "bg-emerald-800",
+                    ];
+                    return (
+                      <div
+                        key={i}
+                        className={`h-8 w-8 flex-shrink-0 rounded ${colors[level]} transition hover:ring-2 hover:ring-zinc-400`}
+                        title={`${i + 1}주차`}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex items-center justify-end gap-4 text-xs text-zinc-500">
+                  <span>Less</span>
+                  <div className="flex gap-1">
+                    <div className="h-3 w-3 rounded bg-zinc-100" />
+                    <div className="h-3 w-3 rounded bg-emerald-200" />
+                    <div className="h-3 w-3 rounded bg-emerald-400" />
+                    <div className="h-3 w-3 rounded bg-emerald-600" />
+                    <div className="h-3 w-3 rounded bg-emerald-800" />
+                  </div>
+                  <span>More</span>
+                </div>
+              </div>
+
+              {/* 최근 풀이한 문제 - 1열 */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold text-zinc-900">최근 풀이</p>
+                <div className="mt-4 space-y-3">
+                  {problems.slice(0, 5).map((problem, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {problem.tier && problem.level ? (
+                          <Image
+                            src={`https://static.solved.ac/tier_small/${getBaekjoonTierId(problem.tier, problem.level)}.svg`}
+                            alt="티어"
+                            width={20}
+                            height={20}
+                            className="h-5 w-5 flex-shrink-0"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="h-5 w-5 flex-shrink-0 rounded bg-zinc-200" />
+                        )}
+                        <span className="text-xs font-medium text-zinc-900 truncate">
+                          {getProblemTitle(problem)}
+                        </span>
+                      </div>
+                      {problem.lastAttempt?.verdict && (
+                        <span
+                          className={`ml-2 flex-shrink-0 text-xs font-semibold ${
+                            problem.lastAttempt.verdict === "AC"
+                              ? "text-emerald-600"
+                              : "text-rose-600"
+                          }`}
+                        >
+                          {problem.lastAttempt.verdict === "AC" ? "정답" : "오답"}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 인기 태그 섹션 */}
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+              <p className="text-sm font-semibold text-zinc-900">자주 사용한 태그</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {[
+                  "그리디",
+                  "구현",
+                  "DFS",
+                  "BFS",
+                  "다이나믹 프로그래밍",
+                  "정렬",
+                  "이진 탐색",
+                  "그래프",
+                ].map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8">
           <div className="flex gap-1 border-b border-zinc-200">
