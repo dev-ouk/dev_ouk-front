@@ -240,7 +240,8 @@ export default function DSAWritePage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <>
+      <div className="mx-auto w-full max-w-4xl">
         <header className="mb-8">
           <button
             type="button"
@@ -519,6 +520,7 @@ export default function DSAWritePage() {
           </div>
         </div>
       )}
+    </>
   );
 }
 
