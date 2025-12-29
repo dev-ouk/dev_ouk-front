@@ -406,24 +406,70 @@ export default function CodingTestPage() {
                     <p className="text-xs text-zinc-500">총 풀이일</p>
                   </div>
                 </div>
-                <div className="flex items-end gap-1 overflow-x-auto pb-2">
-                  {Array.from({ length: 53 }, (_, i) => {
-                    const level = Math.floor(Math.random() * 5);
-                    const colors = [
-                      "bg-zinc-100",
-                      "bg-emerald-200",
-                      "bg-emerald-400",
-                      "bg-emerald-600",
-                      "bg-emerald-800",
-                    ];
-                    return (
-                      <div
-                        key={i}
-                        className={`h-8 w-8 flex-shrink-0 rounded ${colors[level]} transition hover:ring-2 hover:ring-zinc-400`}
-                        title={`${i + 1}주차`}
-                      />
-                    );
-                  })}
+                <div className="overflow-x-auto">
+                  <div className="inline-block">
+                    {/* 월 라벨 (상단) */}
+                    <div className="mb-2 flex gap-1 pl-7">
+                      {[
+                        { month: "Jan", startWeek: 0 },
+                        { month: "Feb", startWeek: 4 },
+                        { month: "Mar", startWeek: 8 },
+                        { month: "Apr", startWeek: 13 },
+                        { month: "May", startWeek: 17 },
+                        { month: "Jun", startWeek: 22 },
+                        { month: "Jul", startWeek: 26 },
+                        { month: "Aug", startWeek: 31 },
+                        { month: "Sep", startWeek: 35 },
+                        { month: "Oct", startWeek: 40 },
+                        { month: "Nov", startWeek: 44 },
+                        { month: "Dec", startWeek: 48 },
+                      ].map(({ month, startWeek }) => (
+                        <div
+                          key={month}
+                          className="text-xs text-zinc-500"
+                          style={{ marginLeft: `${startWeek * 13}px` }}
+                        >
+                          {month}
+                        </div>
+                      ))}
+                    </div>
+                    {/* 잔디밭 그리드 */}
+                    <div className="flex gap-1">
+                      {/* 요일 라벨 (왼쪽, 선택적) */}
+                      <div className="flex flex-col gap-1 pt-0.5">
+                        <div className="h-3" />
+                        {["", "Mon", "", "Wed", "", "Fri", ""].map((day, index) => (
+                          <div key={index} className="h-3 text-xs text-zinc-400">
+                            {day}
+                          </div>
+                        ))}
+                      </div>
+                      {/* 7행 x 53열 그리드 */}
+                      <div className="flex flex-col gap-1">
+                        {Array.from({ length: 7 }, (_, rowIndex) => (
+                          <div key={rowIndex} className="flex gap-1">
+                            {Array.from({ length: 53 }, (_, weekIndex) => {
+                              const level = Math.floor(Math.random() * 5);
+                              const colors = [
+                                "bg-zinc-100",
+                                "bg-emerald-200",
+                                "bg-emerald-400",
+                                "bg-emerald-600",
+                                "bg-emerald-800",
+                              ];
+                              return (
+                                <div
+                                  key={weekIndex}
+                                  className={`h-3 w-3 rounded ${colors[level]} transition hover:ring-2 hover:ring-zinc-400`}
+                                  title={`Week ${weekIndex + 1}, Day ${rowIndex + 1}`}
+                                />
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="mt-4 flex items-center justify-end gap-4 text-xs text-zinc-500">
                   <span>Less</span>
