@@ -15,7 +15,6 @@ import {
   Waves,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { SidebarLayout } from "../_components/sidebar-layout";
 
 type Routine = {
   title: string;
@@ -241,8 +240,7 @@ export default function WorkoutPage() {
   );
 
   return (
-    <SidebarLayout>
-      <div className="mx-auto w-full max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
         <div className="flex flex-col gap-8">
           <div className="rounded-3xl border border-zinc-200 bg-white/80 px-8 py-7 shadow-sm backdrop-blur">
             <div className="flex flex-wrap items-start justify-between gap-6">
@@ -394,6 +392,5 @@ export default function WorkoutPage() {
           </div>
         </div>
       </div>
-    </SidebarLayout>
   );
 }

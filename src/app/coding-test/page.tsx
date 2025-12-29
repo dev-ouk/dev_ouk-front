@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, Loader2, Search, X, XCircle } from "lucide-react";
-import { SidebarLayout } from "../_components/sidebar-layout";
 
 type Problem = {
   site: string;
@@ -282,7 +281,7 @@ export default function CodingTestPage() {
   }, [error, isLoading, problems]);
 
   return (
-    <SidebarLayout>
+    <>
       <div className="mx-auto w-full max-w-4xl">
         <header>
           <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
@@ -375,7 +374,7 @@ export default function CodingTestPage() {
       {isDirectModalOpen ? (
         <DirectAddModal onClose={() => setIsDirectModalOpen(false)} />
       ) : null}
-    </SidebarLayout>
+    </>
   );
 }
 

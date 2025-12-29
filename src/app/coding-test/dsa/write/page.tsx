@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { ArrowLeft, Search, X, Loader2 } from "lucide-react";
-import { SidebarLayout } from "../../../_components/sidebar-layout";
 import { DsnaEditor } from "../_components/dsna-editor";
 
 type TaxonomyTerm = {
@@ -241,8 +240,7 @@ export default function DSAWritePage() {
   };
 
   return (
-    <SidebarLayout>
-      <div className="mx-auto w-full max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
         <header className="mb-8">
           <button
             type="button"
@@ -521,7 +519,6 @@ export default function DSAWritePage() {
           </div>
         </div>
       )}
-    </SidebarLayout>
   );
 }
 

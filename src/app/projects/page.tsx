@@ -13,7 +13,6 @@ import {
   Clock,
   Pause,
 } from "lucide-react";
-import { SidebarLayout } from "../_components/sidebar-layout";
 
 type ProjectStatus = "IN_PROGRESS" | "COMPLETED" | "ON_HOLD";
 
@@ -274,8 +273,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <SidebarLayout>
-      <div className="mx-auto w-full max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
         <header>
           <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Projects
@@ -307,7 +305,6 @@ export default function ProjectsPage() {
           {content()}
         </section>
       </div>
-    </SidebarLayout>
   );
 }
 

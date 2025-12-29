@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import {ChevronLeft, ChevronRight, Code2, Dumbbell, FolderKanban, Home, LucideIcon, Menu} from "lucide-react";
+
+const STORAGE_KEY = "sidebar:isOpen";
 
 type NavItem = {
   id: string;
@@ -40,8 +42,19 @@ const navItems: NavItem[] = [
 ];
 
 export function SidebarLayout({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    return saved ? saved === "1" : true;
+  });
   const pathname = usePathname();
+
+  // localStorage에 상태 저장
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY, isOpen ? "1" : "0");
+    }
+  }, [isOpen]);
 
   return (
     <div className="flex min-h-screen bg-zinc-50 font-sans text-zinc-900">

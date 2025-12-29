@@ -6,7 +6,6 @@ import { useMemo, useState, useEffect } from "react";
 import { ArrowLeft, CheckCircle2, XCircle, Timer, Code2 } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { SidebarLayout } from "../../_components/sidebar-layout";
 import { useSearchParams } from "next/navigation";
 import Editor from "react-simple-code-editor";
 import Prism from "prismjs";
@@ -311,8 +310,7 @@ class Main {
   const meta = getMeta(data.site);
 
   return (
-    <SidebarLayout>
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
         <div className="flex justify-between">
           <Link
             href="/coding-test"
@@ -715,7 +713,6 @@ class Main {
           <p className="text-xs">현재는 예시 데이터로 표시 중입니다. 원하시는 UI를 알려주세요.</p>
         </section>
       </div>
-    </SidebarLayout>
   );
 }
 

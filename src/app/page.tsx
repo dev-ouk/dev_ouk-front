@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { SidebarLayout } from "./_components/sidebar-layout";
 
 export default function Home() {
   return (
-    <SidebarLayout>
-      <div className="flex flex-1 flex-col justify-center">
+    <div className="flex flex-1 flex-col justify-center">
         <div className="max-w-3xl space-y-6">
           <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Dashboard
@@ -56,6 +54,5 @@ export default function Home() {
           </div>
         </div>
       </div>
-    </SidebarLayout>
   );
 }
