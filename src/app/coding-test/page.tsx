@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   Check,
   CheckCircle2,
@@ -75,6 +75,29 @@ type ProblemCandidatesResponse = {
   size: number;
   hasNext: boolean;
   nextCursor: string | null;
+};
+
+type AlgoNote = {
+  slug: string;
+  title: string;
+  isPin: boolean;
+  createdAt: string;
+  taxonomies?: {
+    algo?: {
+      terms?: Array<{
+        slug: string;
+        name: string;
+      }>;
+    };
+  } | null;
+};
+
+type AlgoNotesResponse = {
+  items: AlgoNote[];
+  size: number;
+  hasNext: boolean;
+  nextCursor: string | null;
+  sort: string;
 };
 
 const SITE_META: Record<string, SiteMeta> = {
@@ -207,6 +230,14 @@ export default function CodingTestPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
 
+  // DS&A 노트 상태
+  const [algoNotes, setAlgoNotes] = useState<AlgoNote[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [hasNextNotes, setHasNextNotes] = useState(false);
+  const [nextCursorNotes, setNextCursorNotes] = useState<string | null>(null);
+  const observerTarget = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const controller = new AbortController();
     const fetchProblems = async () => {
@@ -255,6 +286,97 @@ export default function CodingTestPage() {
       controller.abort();
     };
   }, []);
+
+  // DS&A 노트 목록 조회
+  const fetchAlgoNotes = useCallback(
+    async (cursor?: string | null, append = false) => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!baseUrl) {
+        setNotesError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+        setIsLoadingNotes(false);
+        return;
+      }
+
+      try {
+        setIsLoadingNotes(true);
+        setNotesError(null);
+
+        const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        const params = new URLSearchParams();
+        params.append("size", "20");
+        params.append("sort", "created_at_desc");
+
+        if (cursor) {
+          params.append("cursor", cursor);
+        }
+
+        const response = await fetch(
+          `${normalizedBaseUrl}/api/v1/algo-notes?${params.toString()}`,
+          {
+            method: "GET",
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`DS&A 글 목록을 불러올 수 없습니다. (status: ${response.status})`);
+        }
+
+        const payload = (await response.json()) as AlgoNotesResponse;
+
+        if (append) {
+          setAlgoNotes((prev) => [...prev, ...payload.items]);
+        } else {
+          setAlgoNotes(payload.items);
+        }
+
+        setHasNextNotes(payload.hasNext);
+        setNextCursorNotes(payload.nextCursor);
+      } catch (fetchError) {
+        setNotesError((fetchError as Error).message);
+        if (!append) {
+          setAlgoNotes([]);
+        }
+      } finally {
+        setIsLoadingNotes(false);
+      }
+    },
+    [],
+  );
+
+  // 첫 페이지 로드 (탭 전환 시 cursor 초기화)
+  useEffect(() => {
+    if (activeTab === "dsa") {
+      setNextCursorNotes(null);
+      setAlgoNotes([]);
+      fetchAlgoNotes(null, false);
+    }
+  }, [activeTab, fetchAlgoNotes]);
+
+  // 무한 스크롤: Intersection Observer
+  useEffect(() => {
+    if (activeTab !== "dsa" || !hasNextNotes || isLoadingNotes) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && nextCursorNotes) {
+          fetchAlgoNotes(nextCursorNotes, true);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [activeTab, hasNextNotes, isLoadingNotes, nextCursorNotes, fetchAlgoNotes]);
 
   const content = useMemo(() => {
     if (isLoading) {
@@ -611,9 +733,39 @@ export default function CodingTestPage() {
                   글쓰기
                 </button>
               </div>
-              <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-center text-zinc-500">
-                <p className="text-sm font-medium">DS&A 글 섹션은 준비 중입니다.</p>
-              </div>
+              {isLoadingNotes && algoNotes.length === 0 ? (
+                <div className="flex h-48 items-center justify-center rounded-2xl border border-zinc-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-2 text-zinc-500">
+                    <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                    <span className="text-sm font-medium">DS&A 글 목록을 불러오는 중입니다...</span>
+                  </div>
+                </div>
+              ) : notesError ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-600">
+                  <p className="text-sm font-medium">{notesError}</p>
+                </div>
+              ) : algoNotes.length === 0 ? (
+                <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-center text-zinc-500">
+                  <p className="text-sm font-medium">아직 작성된 DS&A 글이 없습니다.</p>
+                  <p className="mt-1 text-xs">
+                    첫 번째 DS&A 글을 작성하면 이곳에 표시됩니다.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <AlgoNotesList notes={algoNotes} />
+                  {hasNextNotes && (
+                    <div ref={observerTarget} className="flex justify-center py-6">
+                      {isLoadingNotes && (
+                        <div className="flex items-center gap-2 text-zinc-500">
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          <span className="text-xs">더 불러오는 중...</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
         </section>
@@ -632,6 +784,82 @@ export default function CodingTestPage() {
         <DirectAddModal onClose={() => setIsDirectModalOpen(false)} />
       ) : null}
     </>
+  );
+}
+
+function formatCreatedAt(dateString?: string | null) {
+  if (!dateString) {
+    return "-";
+  }
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  const now = new Date();
+  const isSameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isSameDay) {
+    return new Intl.DateTimeFormat("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
+  const raw = new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date).replace(/\s/g, "");
+
+  return raw.endsWith(".") ? raw.slice(0, -1) : raw;
+}
+
+function AlgoNotesList({ notes }: { notes: AlgoNote[] }) {
+  return (
+    <div className="space-y-3">
+      {notes.map((note) => (
+        <div
+          key={note.slug}
+          className="group rounded-xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                {note.isPin && (
+                  <span className="text-xs text-zinc-500" title="상단 고정">
+                    📌
+                  </span>
+                )}
+                <h3 className="text-base font-semibold text-zinc-900 truncate">
+                  {note.title}
+                </h3>
+              </div>
+              {note.taxonomies?.algo?.terms && note.taxonomies.algo.terms.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {note.taxonomies.algo.terms.map((term) => (
+                    <span
+                      key={term.slug}
+                      className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700"
+                    >
+                      {term.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex-shrink-0 text-right">
+              <p className="text-xs text-zinc-500">{formatCreatedAt(note.createdAt)}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
