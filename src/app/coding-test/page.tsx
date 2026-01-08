@@ -821,12 +821,19 @@ function formatCreatedAt(dateString?: string | null) {
 }
 
 function AlgoNotesList({ notes }: { notes: AlgoNote[] }) {
+  const router = useRouter();
+
+  const handleNoteClick = (slug: string) => {
+    router.push(`/coding-test/dsa/${slug}`);
+  };
+
   return (
     <div className="space-y-3">
       {notes.map((note) => (
         <div
           key={note.slug}
-          className="group rounded-xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+          onClick={() => handleNoteClick(note.slug)}
+          className="group cursor-pointer rounded-xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:shadow-md"
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">

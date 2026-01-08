@@ -227,11 +227,9 @@ export default function DSAWritePage() {
         status: string;
       };
 
-      // 성공 시 모달 닫고 리다이렉트 (또는 목록으로 이동)
+      // 성공 시 모달 닫고 상세 페이지로 리다이렉트
       handlePreviewCancel();
-      // TODO: 상세 페이지로 리다이렉트하거나 목록으로 이동
-      // router.push(`/coding-test/dsa/${result.slug}`);
-      router.push("/coding-test/dsa");
+      router.push(`/coding-test/dsa/${result.slug}`);
     } catch (fetchError) {
       setSubmitError((fetchError as Error).message);
     } finally {

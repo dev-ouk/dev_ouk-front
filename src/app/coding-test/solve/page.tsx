@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
-import { ArrowLeft, CheckCircle2, XCircle, Timer, Code2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Timer, Code2, Loader2 } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useSearchParams } from "next/navigation";
@@ -125,11 +125,59 @@ function getPrismLanguage(lang?: string) {
   return LANGUAGE_MAP[key] ?? "text";
 }
 
+// 언어명 매핑: 프론트엔드 -> API
+function mapLanguageToApi(language: string): string {
+  const mapping: Record<string, string> = {
+    Java: "JAVA",
+    JavaScript: "JS",
+    TypeScript: "TS",
+    Python: "PYTHON",
+    "C++": "CPP",
+    C: "C",
+    CPP: "CPP",
+    "C#": "C#",
+    Csharp: "C#",
+    Go: "GO",
+    Golang: "GO",
+    Kotlin: "KOTLIN",
+  };
+  return mapping[language] ?? language.toUpperCase();
+}
+
+// verdict 매핑: 프론트엔드 RE -> API RTE
+function mapVerdictToApi(verdict: string): string {
+  return verdict === "RE" ? "RTE" : verdict;
+}
+
+// duration 문자열에서 숫자 추출 (예: "18분" -> 18, "10" -> 10)
+function parseDurationToMinutes(duration: string): number {
+  const numericMatch = duration.match(/\d+/);
+  return numericMatch ? parseInt(numericMatch[0], 10) : 0;
+}
+
+// YYYY-MM-DD 형식을 ISO_OFFSET_DATE_TIME으로 변환
+function convertDateToIsoOffsetDateTime(dateString: string): string {
+  if (!dateString) return "";
+  // 이미 ISO 형식이면 그대로 반환
+  if (dateString.includes("T")) return dateString;
+  // YYYY-MM-DD 형식이면 시간 추가
+  const date = new Date(dateString + "T00:00:00");
+  const offset = -date.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0");
+  const minutes = String(Math.abs(offset) % 60).padStart(2, "0");
+  return `${date.toISOString().slice(0, 19)}${sign}${hours}:${minutes}`;
+}
+
 export default function SolvePage() {
   const [activeTab, setActiveTab] = useState(0);
   const [draft, setDraft] = useState<Attempt | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const searchParams = useSearchParams();
 
   const data = useMemo(() => {
@@ -153,98 +201,66 @@ export default function SolvePage() {
     };
   }, [searchParams]);
 
-  // API 연동 전: 최근 시도/상태 탭용 가짜 데이터
-  const [attempts, setAttempts] = useState<Attempt[]>([
-    {
-      verdict: "AC",
-      attemptedAt: "2025-12-05T13:45:00Z",
-      duration: "18분",
-      language: "Java",
-      summary:
-        "DFS/백트래킹으로 한 줄에 퀸 하나만 두고, 대각선 충돌만 검사하는 방식으로 통과했다. " +
-        "행·열을 비트마스크로 관리해서 분기를 줄였고, 대각선은 이전 행만 비교해도 충분했다. " +
-        "중간에 방문 배열을 잘못 초기화해서 한 번 TLE가 났지만, 범위 줄이기로 해결했다. " +
-        "테스트 데이터가 작다고 방심하지 말고 최악 케이스를 항상 염두에 둬야 한다. " +
-        "시간 복잡도와 가지치기 조건을 먼저 적어두면 구현 실수가 크게 줄어든다.",
-      code: `import java.util.*;
-import java.io.*;
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
 
-class Main {
-    static int N;
-    static int count = 0;
+  // 시도 목록 조회
+  useEffect(() => {
+    const controller = new AbortController();
 
-    public static void main(String[] args) throws Exception {
-        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-        N = Integer.parseInt(br.readLine());
-        int[] col = new int[N];
-        dfs(0, 0, col);
-        System.out.println(count);
-    }
+    const fetchAttempts = async () => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-    static void dfs(int r, long usedCol, int[] col) {
-        if (r == N) { count++; return; }
-        for (int c = 0; c < N; c++) {
-            if ((usedCol & (1L << c)) != 0) continue;
-            boolean cross = false;
-            for (int pr = 0; pr < r; pr++) {
-                if (Math.abs(pr - r) == Math.abs(col[pr] - c)) { cross = true; break; }
-            }
-            if (cross) continue;
-            col[r] = c;
-            dfs(r + 1, usedCol | (1L << c), col);
+      if (!baseUrl) {
+        setError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        // TODO: 시도 목록 조회 API 엔드포인트로 변경 필요
+        // 예: GET /api/v1/attempts?site={site}&siteProblemId={siteProblemId}
+        const params = new URLSearchParams({
+          site: data.site,
+          siteProblemId: data.siteProblemId,
+        });
+        const response = await fetch(
+          `${normalizedBaseUrl}/api/v1/attempts?${params.toString()}`,
+          {
+            method: "GET",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`시도 목록을 불러올 수 없습니다. (status: ${response.status})`);
         }
+
+        // TODO: API 응답 구조에 맞게 타입 정의 필요
+        const payload = (await response.json()) as { items?: Attempt[] };
+        setAttempts(payload.items ?? []);
+      } catch (fetchError) {
+        if ((fetchError as Error).name === "AbortError") {
+          return;
+        }
+        setError((fetchError as Error).message);
+        setAttempts([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (data.site && data.siteProblemId) {
+      fetchAttempts();
     }
-}`,
-      learnings:
-        "대각선 충돌만 체크해도 충분하다는 점을 수식으로 먼저 확인하자. " +
-        "비트마스크로 열을 관리하면 O(1)로 열 충돌을 확인할 수 있어 분기 수가 확 줄었다. " +
-        "중간 상태를 프린트해서 디버깅하는 대신, 조건을 표로 정리하고 놓친 케이스를 체크리스트로 관리하니 더 빨랐다. " +
-        "다음에는 실패 케이스를 먼저 적고, 그걸 막는 조건을 코드로 옮기는 습관을 들이겠다.",
-      nextReview: "2025-12-12",
-    },
-    {
-      verdict: "WA",
-      attemptedAt: "2025-12-04T21:10:00Z",
-      duration: "25분",
-      language: "Java",
-      summary:
-        "대각선 체크를 빼먹어 일부 케이스에서 충돌을 놓쳤다. " +
-        "행/열만 검사하면 충분하다고 착각한 게 원인이었다. " +
-        "테스트를 몇 개만 돌려보고 통과했다고 판단한 것이 치명적이었다. " +
-        "체크리스트 없이 구현하면 제약을 하나씩 빼먹기 쉽다는 것을 다시 느꼈다. " +
-        "최소한의 반례라도 직접 만들어 보는 습관이 필요하다.",
-      code: "// 대각선 체크 누락 버전",
-      failureCategory: "Correctness",
-      failureReason: "대각선 충돌 로직을 넣지 않아 오답.",
-      learnings:
-        "필수 제약(행/열/대각선)을 먼저 종이에 적고, 구현 후 하나씩 체크해 보자. " +
-        "반례를 직접 만들고, 그 반례가 통과하는지 확인하는 과정을 빼먹지 않는다. " +
-        "테스트를 짧게 끝내지 말고, 실패한 케이스를 기록해 두면 다음 번에 같은 실수를 줄일 수 있다. " +
-        "디버깅 시에는 로그 대신 제약 조건 목록과 실제 코드 흐름을 나란히 보며 차이를 찾는 것이 효과적이었다.",
-      nextReview: "2025-12-10",
-    },
-    {
-      verdict: "TLE",
-      attemptedAt: "2025-12-01T09:05:00Z",
-      duration: "40분",
-      language: "Java",
-      summary:
-        "모든 칸을 다 돌며 백트래킹을 돌려서 시간 초과가 났다. " +
-        "가지치기 전에 하위 분기를 전부 확장해버려 연산량이 폭증했다. " +
-        "열/대각선 체크를 뒤늦게 넣어도 이미 쌓인 재귀 깊이 때문에 효과가 없었다. " +
-        "입력 크기가 커질 때의 연산량을 대략 계산하지 않고 구현부터 한 것이 문제였다. " +
-        "최악 복잡도를 추정해보고, 줄일 수 있는 제약을 먼저 반영해야 한다.",
-      code: "// 전체 탐색으로 인한 TLE",
-      failureCategory: "Performance",
-      failureReason: "불필요한 완전 탐색으로 가지치기 부족.",
-      learnings:
-        "가지치기 조건을 초기에 넣지 않으면 재귀 깊이가 걷잡을 수 없게 커진다. " +
-        "연산량이 의심되면 먼저 최악 복잡도를 적고, 줄일 수 있는 제약을 모두 열거한 뒤 코드에 반영하자. " +
-        "무조건 전체 탐색을 시도하기보다, 배제할 수 있는 상태를 더 일찍 제거하는 순서를 고민하는 게 중요하다. " +
-        "다음에는 구현 전에 상태·제약·복잡도를 체크리스트로 작성한 뒤 진행하기.",
-      nextReview: "2025-12-08",
-    },
-  ]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [data.site, data.siteProblemId]);
 
   const handleAddAttempt = () => {
     const now = new Date();
@@ -264,24 +280,152 @@ class Main {
       nextReview: dateOnly,
     };
 
+    // draft와 isEditing을 먼저 설정하고, 그 다음 activeTab 설정
     setDraft(newDraft);
     setIsEditing(true);
-    setActiveTab(attempts.length);
+    // activeTab을 draft 탭 인덱스(attempts.length)로 설정
+    const newActiveTab = attempts.length;
+    setActiveTab(newActiveTab);
   };
 
   const handleDraftChange = <K extends keyof Attempt>(key: K, value: Attempt[K]) => {
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!draft) return;
-    setAttempts((prev) => {
-      const updated = [...prev, draft];
-      setActiveTab(updated.length - 1);
-      return updated;
-    });
-    setDraft(null);
-    setIsEditing(false);
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      setSubmitError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      // 필수 필드 검증
+      if (!draft.verdict || !draft.attemptedAt || !draft.language) {
+        setSubmitError("필수 정보가 누락되었습니다.");
+        return;
+      }
+
+      // duration 문자열에서 숫자 추출
+      const timeSpent = parseDurationToMinutes(draft.duration);
+      if (timeSpent < 0) {
+        setSubmitError("풀이 시간은 0 이상이어야 합니다.");
+        return;
+      }
+
+      // 날짜 형식 변환
+      const attemptedAt = convertDateToIsoOffsetDateTime(draft.attemptedAt);
+      const nextReviewAt = draft.nextReview
+        ? convertDateToIsoOffsetDateTime(draft.nextReview)
+        : undefined;
+
+      // API 요청 Body 준비 (프론트엔드 필드 -> API 필드 매핑)
+      const requestBody = {
+        site: data.site,
+        siteProblemId: data.siteProblemId,
+        timeSpent,
+        language: mapLanguageToApi(draft.language),
+        notes: draft.summary || undefined,
+        verdict: mapVerdictToApi(draft.verdict),
+        code: draft.code || undefined,
+        attemptedAt,
+        failType:
+          draft.verdict !== "AC" && draft.failureCategory
+            ? draft.failureCategory
+            : undefined,
+        failDetail:
+          draft.verdict !== "AC" && draft.failureReason
+            ? draft.failureReason
+            : undefined,
+        solution:
+          draft.verdict !== "AC" && draft.learnings ? draft.learnings : undefined,
+        nextReviewAt,
+      };
+
+      const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+      const response = await fetch(`${normalizedBaseUrl}/api/v1/attempts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as {
+          message?: string;
+          correlationId?: string;
+          errors?: Array<{
+            field?: string;
+            code?: string;
+            errorMessage?: string;
+          }>;
+        };
+
+        let errorMessage = errorData.message || "시도 추가에 실패했습니다.";
+
+        // 상태 코드별 에러 메시지 처리
+        if (response.status === 400) {
+          const validationErrors = errorData.errors
+            ?.map((err) => err.errorMessage || `${err.field}: ${err.code}`)
+            .join(", ");
+          errorMessage = `입력 정보가 올바르지 않습니다. ${validationErrors || errorMessage}`;
+        } else if (response.status === 404) {
+          errorMessage = `해당 문제를 찾을 수 없습니다. ${errorMessage}`;
+        } else if (response.status >= 500) {
+          errorMessage = `서버 오류가 발생했습니다. ${errorMessage}`;
+        }
+
+        if (errorData.correlationId) {
+          errorMessage += ` (ID: ${errorData.correlationId})`;
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const result = (await response.json()) as {
+        attemptUuid: string;
+        site: string;
+        siteProblemId: string;
+      };
+
+      // 성공 시 draft 초기화하고 시도 목록 다시 불러오기
+      setDraft(null);
+      setIsEditing(false);
+
+      // 시도 목록을 다시 불러와서 최신 데이터로 갱신
+      const fetchAttempts = async () => {
+        const params = new URLSearchParams({
+          site: data.site,
+          siteProblemId: data.siteProblemId,
+        });
+        const listResponse = await fetch(
+          `${normalizedBaseUrl}/api/v1/attempts?${params.toString()}`,
+          {
+            method: "GET",
+          },
+        );
+
+        if (listResponse.ok) {
+          const payload = (await listResponse.json()) as { items?: Attempt[] };
+          const updatedAttempts = payload.items ?? [];
+          setAttempts(updatedAttempts);
+          // 새로 추가된 시도 탭으로 이동
+          setActiveTab(updatedAttempts.length - 1);
+        }
+      };
+
+      await fetchAttempts();
+    } catch (fetchError) {
+      setSubmitError((fetchError as Error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCancelDraft = () => {
@@ -292,9 +436,13 @@ class Main {
 
   // activeTab이 유효한 범위를 벗어나지 않도록 보정
   useEffect(() => {
-    const displayLength = (isEditing && draft ? attempts.length + 1 : attempts.length) || 1;
-    if (activeTab >= displayLength) {
+    const displayLength = isEditing && draft ? attempts.length + 1 : attempts.length;
+    if (displayLength > 0 && activeTab >= displayLength) {
       setActiveTab(Math.max(0, displayLength - 1));
+    }
+    // 편집 모드이고 draft가 있을 때 activeTab이 draft 탭을 가리키도록 보정
+    if (isEditing && draft !== null && activeTab !== attempts.length) {
+      setActiveTab(attempts.length);
     }
   }, [activeTab, attempts.length, draft, isEditing]);
 
@@ -414,43 +562,60 @@ class Main {
             <button
               type="button"
               onClick={handleAddAttempt}
-              className="rounded-full border border-dashed border-zinc-300 px-3 py-1 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900"
+              disabled={isLoading}
+              className="rounded-full border border-dashed border-zinc-300 px-3 py-1 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
               + 시도 추가
             </button>
           </div>
 
           <div className="mt-4 space-y-2">
-            {(() => {
-              const displayAttempts = isEditing && draft ? [...attempts, draft] : attempts;
-              const attempt = displayAttempts[activeTab] ?? displayAttempts[0];
-              const isDraftTab = isEditing && draft && activeTab === attempts.length;
-
-              if (isDraftTab && draft) {
-                return (
-                  <div className="space-y-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-4">
-                    <div className="flex items-center justify-between pb-1">
-                      <div className="space-y-1">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Attempt</p>
-                        <h2 className="text-lg font-semibold text-zinc-900">새 시도 작성</h2>
+            {isLoading && !isEditing ? (
+              <div className="flex items-center justify-center py-8 text-sm text-zinc-500">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                시도 목록을 불러오는 중입니다...
+              </div>
+            ) : isEditing && draft ? (
+              // 편집 중이고 draft가 있으면 무조건 draft 폼 표시 (최우선)
+              (() => {
+                  return (
+                    <div className="space-y-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-4">
+                      <div className="flex items-center justify-between pb-1">
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Attempt</p>
+                          <h2 className="text-lg font-semibold text-zinc-900">새 시도 작성</h2>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCancelDraft}
+                            disabled={isSubmitting}
+                            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            취소
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveDraft}
+                            disabled={isSubmitting}
+                            className="inline-flex items-center rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                          >
+                            {isSubmitting ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                저장 중...
+                              </>
+                            ) : (
+                              "저장"
+                            )}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={handleCancelDraft}
-                          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
-                        >
-                          취소
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSaveDraft}
-                          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
-                        >
-                          저장
-                        </button>
-                      </div>
-                    </div>
+                      {submitError && (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
+                          <p className="font-medium">{submitError}</p>
+                        </div>
+                      )}
 
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="space-y-1">
@@ -590,39 +755,67 @@ class Main {
                       ) : null}
                     </div>
 
-                    <div className="mt-4 flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCancelDraft}
-                        className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
-                      >
-                        취소
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveDraft}
-                        className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700"
-                      >
-                        저장
-                      </button>
+                      <div className="mt-4 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelDraft}
+                          disabled={isSubmitting}
+                          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveDraft}
+                          disabled={isSubmitting}
+                          className="inline-flex items-center rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                              저장 중...
+                            </>
+                          ) : (
+                            "저장"
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              }
+                  );
+              })()
+            ) : error ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+                <p className="font-medium">{error}</p>
+              </div>
+            ) : attempts.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center text-zinc-500">
+                <p className="text-sm font-medium">아직 기록된 시도가 없습니다.</p>
+                <p className="mt-1 text-xs">+ 시도 추가 버튼을 눌러 첫 시도를 기록해보세요.</p>
+              </div>
+            ) : (
+              (() => {
+                const displayAttempts = attempts;
+                const attempt = displayAttempts[activeTab];
+                if (!attempt) {
+                  return (
+                    <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center text-zinc-500">
+                      <p className="text-sm font-medium">시도를 선택해주세요.</p>
+                    </div>
+                  );
+                }
 
-              const verdictDisplay = getVerdictDisplay(attempt.verdict);
-              const Icon = verdictDisplay.Icon;
-              return (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <Icon className={`h-4 w-4 ${verdictDisplay.className}`} aria-hidden="true" />
-                    <span className="font-semibold text-zinc-900">{attempt.title}</span>
-                    <span className="text-xs text-zinc-500">
-                      최근 시도: {formatAttemptedAt(attempt.attemptedAt)}
-                    </span>
-                    <span className="text-xs text-zinc-500">· 풀이 시간 {attempt.duration}</span>
-                    <span className="text-xs text-zinc-500">· 사용 언어 {attempt.language}</span>
-                  </div>
+                const verdictDisplay = getVerdictDisplay(attempt.verdict);
+                const Icon = verdictDisplay.Icon;
+                return (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Icon className={`h-4 w-4 ${verdictDisplay.className}`} aria-hidden="true" />
+                      <span className="text-xs text-zinc-500">
+                        시도 일시: {formatAttemptedAt(attempt.attemptedAt)}
+                      </span>
+                      <span className="text-xs text-zinc-500">· 풀이 시간 {attempt.duration}</span>
+                      <span className="text-xs text-zinc-500">· 사용 언어 {attempt.language}</span>
+                    </div>
 
                   <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                     <div className="text-base font-semibold text-zinc-800">시도 결과</div>
@@ -704,7 +897,8 @@ class Main {
                   )}
                 </div>
               );
-            })()}
+            })()
+            )}
           </div>
         </div>
 
