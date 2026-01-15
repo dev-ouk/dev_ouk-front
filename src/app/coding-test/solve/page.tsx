@@ -28,6 +28,26 @@ type SearchParams = {
   attemptedAt?: string;
 };
 
+type TaxonomyTerm = {
+  slug: string;
+  name: string;
+};
+
+type ProblemDetailResponse = {
+  site: string;
+  siteProblemId: string;
+  title: string;
+  difficulty: number | null;
+  url: string;
+  lastAttempt: {
+    verdict: string;
+    attemptedAt: string;
+  } | null;
+  taxonomies: {
+    algo?: TaxonomyTerm[];
+  };
+};
+
 type Attempt = {
   verdict: string;
   attemptedAt: string;
@@ -178,30 +198,86 @@ export default function SolvePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [problemDetail, setProblemDetail] = useState<ProblemDetailResponse | null>(null);
+  const [isLoadingProblem, setIsLoadingProblem] = useState(false);
+  const [problemError, setProblemError] = useState<string | null>(null);
   const searchParams = useSearchParams();
 
-  const data = useMemo(() => {
-    const getOrDefault = (key: keyof SearchParams, fallback: string) =>
-      searchParams?.get(key) ?? fallback;
-    const parsedDifficulty = searchParams?.get("difficulty")
-      ? Number(searchParams.get("difficulty"))
-      : null;
-    const difficulty =
-      parsedDifficulty == null || Number.isNaN(parsedDifficulty) ? 15 : parsedDifficulty;
-
-    return {
-      site: getOrDefault("site", "BAEKJOON"),
-      siteProblemId: getOrDefault("siteProblemId", "1000"),
-      title: getOrDefault("title", "A+B"),
-      difficulty,
-      lastAttempt: {
-        verdict: getOrDefault("verdict", "AC"),
-        attemptedAt: getOrDefault("attemptedAt", "2025-12-05T13:45:00Z"),
-      },
-    };
+  // URL 쿼리에서 문제 식별 정보만 가져오기
+  const problemKey = useMemo(() => {
+    const site = searchParams?.get("site") ?? "BAEKJOON";
+    const siteProblemId = searchParams?.get("siteProblemId") ?? "";
+    return { site, siteProblemId };
   }, [searchParams]);
 
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+
+  // 문제 정보 조회
+  useEffect(() => {
+    if (!problemKey.site || !problemKey.siteProblemId) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchProblemDetail = async () => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!baseUrl) {
+        setProblemError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+        setIsLoadingProblem(false);
+        return;
+      }
+
+      try {
+        setIsLoadingProblem(true);
+        setProblemError(null);
+
+        const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        const response = await fetch(
+          `${normalizedBaseUrl}/api/v1/problems/${encodeURIComponent(problemKey.site)}/${encodeURIComponent(problemKey.siteProblemId)}`,
+          {
+            method: "GET",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            const errorData = (await response.json()) as {
+              code?: string;
+              message?: string;
+            };
+            throw new Error(errorData.message || "해당 문제를 찾을 수 없습니다.");
+          } else if (response.status === 400) {
+            const errorData = (await response.json()) as {
+              code?: string;
+              message?: string;
+            };
+            throw new Error(errorData.message || "잘못된 요청입니다.");
+          }
+          throw new Error(`문제 정보를 불러올 수 없습니다. (status: ${response.status})`);
+        }
+
+        const payload = (await response.json()) as ProblemDetailResponse;
+        setProblemDetail(payload);
+      } catch (fetchError) {
+        if ((fetchError as Error).name === "AbortError") {
+          return;
+        }
+        setProblemError((fetchError as Error).message);
+        setProblemDetail(null);
+      } finally {
+        setIsLoadingProblem(false);
+      }
+    };
+
+    fetchProblemDetail();
+
+    return () => {
+      controller.abort();
+    };
+  }, [problemKey.site, problemKey.siteProblemId]);
 
   // 시도 목록 조회
   useEffect(() => {
@@ -221,11 +297,9 @@ export default function SolvePage() {
         setError(null);
 
         const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
-        // TODO: 시도 목록 조회 API 엔드포인트로 변경 필요
-        // 예: GET /api/v1/attempts?site={site}&siteProblemId={siteProblemId}
         const params = new URLSearchParams({
-          site: data.site,
-          siteProblemId: data.siteProblemId,
+          site: problemKey.site,
+          siteProblemId: problemKey.siteProblemId,
         });
         const response = await fetch(
           `${normalizedBaseUrl}/api/v1/attempts?${params.toString()}`,
@@ -239,7 +313,6 @@ export default function SolvePage() {
           throw new Error(`시도 목록을 불러올 수 없습니다. (status: ${response.status})`);
         }
 
-        // TODO: API 응답 구조에 맞게 타입 정의 필요
         const payload = (await response.json()) as { items?: Attempt[] };
         setAttempts(payload.items ?? []);
       } catch (fetchError) {
@@ -253,14 +326,14 @@ export default function SolvePage() {
       }
     };
 
-    if (data.site && data.siteProblemId) {
+    if (problemKey.site && problemKey.siteProblemId) {
       fetchAttempts();
     }
 
     return () => {
       controller.abort();
     };
-  }, [data.site, data.siteProblemId]);
+  }, [problemKey.site, problemKey.siteProblemId]);
 
   const handleAddAttempt = () => {
     const now = new Date();
@@ -326,8 +399,8 @@ export default function SolvePage() {
 
       // API 요청 Body 준비 (프론트엔드 필드 -> API 필드 매핑)
       const requestBody = {
-        site: data.site,
-        siteProblemId: data.siteProblemId,
+        site: problemKey.site,
+        siteProblemId: problemKey.siteProblemId,
         timeSpent,
         language: mapLanguageToApi(draft.language),
         notes: draft.summary || undefined,
@@ -401,8 +474,8 @@ export default function SolvePage() {
       // 시도 목록을 다시 불러와서 최신 데이터로 갱신
       const fetchAttempts = async () => {
         const params = new URLSearchParams({
-          site: data.site,
-          siteProblemId: data.siteProblemId,
+          site: problemKey.site,
+          siteProblemId: problemKey.siteProblemId,
         });
         const listResponse = await fetch(
           `${normalizedBaseUrl}/api/v1/attempts?${params.toString()}`,
@@ -455,7 +528,23 @@ export default function SolvePage() {
     return `${label} 시도`;
   };
 
-  const meta = getMeta(data.site);
+  // 문제 정보 (API 응답 또는 URL 쿼리 fallback)
+  const problemData = problemDetail ?? {
+    site: problemKey.site,
+    siteProblemId: problemKey.siteProblemId,
+    title: searchParams?.get("title") ?? "문제 제목",
+    difficulty: searchParams?.get("difficulty") ? Number(searchParams.get("difficulty")) : null,
+    url: "",
+    lastAttempt: searchParams?.get("verdict") && searchParams?.get("attemptedAt")
+      ? {
+          verdict: searchParams.get("verdict")!,
+          attemptedAt: searchParams.get("attemptedAt")!,
+        }
+      : null,
+    taxonomies: {},
+  };
+
+  const meta = getMeta(problemData.site);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
@@ -469,72 +558,99 @@ export default function SolvePage() {
           </Link>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 border-b border-zinc-200 pb-4">
-          {meta.logoSrc ? (
-            <Image
-              src={meta.logoSrc}
-              alt={`${meta.name} 로고`}
-              width={48}
-              height={48}
-              className="h-12 w-12 rounded-lg"
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-200 text-sm font-semibold text-zinc-600">
-              {data.site?.[0]?.toUpperCase() ?? "?"}
-            </div>
-          )}
+        {problemError ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+            <p className="font-medium">{problemError}</p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-4 border-b border-zinc-200 pb-4">
+            {meta.logoSrc ? (
+              <Image
+                src={meta.logoSrc}
+                alt={`${meta.name} 로고`}
+                width={48}
+                height={48}
+                className="h-12 w-12 rounded-lg"
+              />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-200 text-sm font-semibold text-zinc-600">
+                {problemData.site?.[0]?.toUpperCase() ?? "?"}
+              </div>
+            )}
 
-          <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex items-center gap-2 text-sm text-zinc-500">
-              <span className="font-mono text-xs">{data.siteProblemId}</span>
-              <span className="text-xs text-zinc-400">·</span>
-              <span>{meta.name}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold text-zinc-900 leading-tight">{data.title}</h1>
-              {data.difficulty != null && (
-                <>
-                  {data.site?.toUpperCase() === "BAEKJOON" ? (
-                    <Image
-                      src={`https://static.solved.ac/tier_small/${data.difficulty}.svg`}
-                      alt="난이도"
-                      width={32}
-                      height={32}
-                      className="h-8 w-8"
-                      unoptimized
-                    />
-                  ) : (
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex items-center gap-2 text-sm text-zinc-500">
+                <span className="font-mono text-xs">{problemData.siteProblemId}</span>
+                <span className="text-xs text-zinc-400">·</span>
+                <span>{meta.name}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {isLoadingProblem ? (
+                  <div className="flex items-center gap-2 text-zinc-500">
+                    <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                    <span className="text-lg">로딩 중...</span>
+                  </div>
+                ) : (
+                  <>
+                    <h1 className="text-3xl font-semibold text-zinc-900 leading-tight">{problemData.title}</h1>
+                    {problemData.difficulty != null && (
+                      <>
+                        {problemData.site?.toUpperCase() === "BAEKJOON" ? (
+                          <Image
+                            src={`https://static.solved.ac/tier_small/${problemData.difficulty}.svg`}
+                            alt="난이도"
+                            width={32}
+                            height={32}
+                            className="h-8 w-8"
+                            unoptimized
+                          />
+                        ) : (
+                          <span
+                            className="inline-flex items-center rounded-full border border-current px-3 py-1 text-sm font-semibold uppercase"
+                            style={{
+                              color: PROGRAMMERS_LEVEL_COLORS[problemData.difficulty] ?? "#1bbaff",
+                            }}
+                          >
+                            Lv. {problemData.difficulty}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+              {problemData.lastAttempt && (() => {
+                const verdictDisplay = getVerdictDisplay(problemData.lastAttempt.verdict);
+                const Icon = verdictDisplay.Icon;
+                return (
+                  <div className="flex items-center gap-2 text-xs text-zinc-600">
                     <span
-                      className="inline-flex items-center rounded-full border border-current px-3 py-1 text-sm font-semibold uppercase"
-                      style={{
-                        color: PROGRAMMERS_LEVEL_COLORS[data.difficulty] ?? "#1bbaff",
-                      }}
+                      className={`inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 font-semibold ${verdictDisplay.className}`}
                     >
-                      Lv. {data.difficulty}
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      {verdictDisplay.label}
                     </span>
-                  )}
-                </>
+                    <span className="text-[11px] text-zinc-500">
+                      최근 시도: {formatAttemptedAt(problemData.lastAttempt.attemptedAt)}
+                    </span>
+                  </div>
+                );
+              })()}
+              {problemData.taxonomies?.algo && problemData.taxonomies.algo.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {problemData.taxonomies.algo.map((term: TaxonomyTerm) => (
+                    <span
+                      key={term.slug}
+                      className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700"
+                    >
+                      {term.name}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
-            {data.lastAttempt && (() => {
-              const verdictDisplay = getVerdictDisplay(data.lastAttempt.verdict);
-              const Icon = verdictDisplay.Icon;
-              return (
-                <div className="flex items-center gap-2 text-xs text-zinc-600">
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 font-semibold ${verdictDisplay.className}`}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                    {verdictDisplay.label}
-                  </span>
-                  <span className="text-[11px] text-zinc-500">
-                    최근 시도: {formatAttemptedAt(data.lastAttempt.attemptedAt)}
-                  </span>
-                </div>
-              );
-            })()}
           </div>
-        </div>
+        )}
 
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-3">
