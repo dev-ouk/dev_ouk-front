@@ -871,6 +871,42 @@ function AlgoNotesList({ notes }: { notes: AlgoNote[] }) {
 }
 
 function ProblemTable({ problems }: { problems: Problem[] }) {
+  const router = useRouter();
+
+  const getDifficultyParam = (problem: Problem) => {
+    const siteKey = problem.site?.toUpperCase();
+    if (siteKey === "BAEKJOON") {
+      return getBaekjoonTierId(problem.tier, problem.level);
+    }
+    return problem.level ?? null;
+  };
+
+  const handleRowClick = (problem: Problem) => {
+    const params = new URLSearchParams({
+      site: problem.site,
+      siteProblemId: String(problem.siteProblemId ?? ""),
+    });
+
+    const title = getProblemTitle(problem);
+    if (title && title !== "-") {
+      params.set("title", title);
+    }
+
+    const difficulty = getDifficultyParam(problem);
+    if (difficulty != null) {
+      params.set("difficulty", String(difficulty));
+    }
+
+    if (problem.lastAttempt?.verdict) {
+      params.set("verdict", problem.lastAttempt.verdict);
+    }
+    if (problem.lastAttempt?.attemptedAt) {
+      params.set("attemptedAt", problem.lastAttempt.attemptedAt);
+    }
+
+    router.push(`/coding-test/solve?${params.toString()}`);
+  };
+
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
       <table className="min-w-full table-fixed">
@@ -888,7 +924,16 @@ function ProblemTable({ problems }: { problems: Problem[] }) {
           {problems.map((problem, index) => (
             <tr
               key={`${problem.site}-${problem.siteProblemId}-${index}`}
-              className="border-t border-zinc-100 text-sm text-zinc-700 transition hover:bg-zinc-50"
+              onClick={() => handleRowClick(problem)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleRowClick(problem);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer border-t border-zinc-100 text-sm text-zinc-700 transition hover:bg-zinc-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
             >
               <td className="px-6 py-4">
                 <SiteCell site={problem.site} />
