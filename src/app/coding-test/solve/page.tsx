@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft, CheckCircle2, XCircle, Timer, Code2, Loader2 } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -66,6 +66,28 @@ type AttemptItemResponse = {
 type AttemptsListResponse = {
   total: number;
   items: AttemptItemResponse[];
+};
+
+type AlgoNoteSummary = {
+  slug: string;
+  title: string;
+  createdAt: string;
+  taxonomies?: {
+    algo?: {
+      terms?: Array<{
+        slug: string;
+        name: string;
+      }>;
+    };
+  } | null;
+};
+
+type AlgoNotesResponse = {
+  items: AlgoNoteSummary[];
+  size?: number;
+  hasNext?: boolean;
+  nextCursor?: string | null;
+  sort?: string | null;
 };
 
 // 프론트엔드에서 사용하는 Attempt 타입
@@ -250,6 +272,15 @@ export default function SolvePage() {
   const [problemDetail, setProblemDetail] = useState<ProblemDetailResponse | null>(null);
   const [isLoadingProblem, setIsLoadingProblem] = useState(false);
   const [problemError, setProblemError] = useState<string | null>(null);
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [noteSearch, setNoteSearch] = useState("");
+  const [algoNotes, setAlgoNotes] = useState<AlgoNoteSummary[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [selectedNoteSlugs, setSelectedNoteSlugs] = useState<string[]>([]);
+  const [notesHasNext, setNotesHasNext] = useState(false);
+  const [notesNextCursor, setNotesNextCursor] = useState<string | null>(null);
+  const notesObserverTarget = useRef<HTMLDivElement | null>(null);
   const searchParams = useSearchParams();
 
   // URL 쿼리에서 문제 식별 정보만 가져오기
@@ -328,6 +359,103 @@ export default function SolvePage() {
     };
   }, [problemKey.site, problemKey.siteProblemId]);
 
+  const fetchNotes = useCallback(
+    async (cursor?: string | null, append = false) => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!baseUrl) {
+        setNotesError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+        setIsLoadingNotes(false);
+        return;
+      }
+
+      try {
+        setIsLoadingNotes(true);
+        setNotesError(null);
+
+        const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        const params = new URLSearchParams();
+        params.append("size", "10");
+        params.append("sort", "created_at_desc");
+
+        if (noteSearch.trim()) {
+          params.append("q", noteSearch.trim());
+        }
+
+        if (cursor) {
+          params.append("cursor", cursor);
+        }
+
+        const response = await fetch(
+          `${normalizedBaseUrl}/api/v1/algo-notes?${params.toString()}`,
+          {
+            method: "GET",
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`노트 목록을 불러올 수 없습니다. (status: ${response.status})`);
+        }
+
+        const payload = (await response.json()) as AlgoNotesResponse;
+        if (append) {
+          setAlgoNotes((prev) => [...prev, ...(payload.items ?? [])]);
+        } else {
+          setAlgoNotes(payload.items ?? []);
+        }
+        setNotesHasNext(Boolean(payload.hasNext));
+        setNotesNextCursor(payload.nextCursor ?? null);
+      } catch (fetchError) {
+        setNotesError((fetchError as Error).message);
+        if (!append) {
+          setAlgoNotes([]);
+          setNotesHasNext(false);
+          setNotesNextCursor(null);
+        }
+      } finally {
+        setIsLoadingNotes(false);
+      }
+    },
+    [noteSearch],
+  );
+
+  useEffect(() => {
+    if (!isNoteModalOpen) {
+      return;
+    }
+
+    setNotesHasNext(false);
+    setNotesNextCursor(null);
+    setAlgoNotes([]);
+
+    fetchNotes(null, false);
+  }, [isNoteModalOpen, noteSearch, fetchNotes]);
+
+  useEffect(() => {
+    if (!isNoteModalOpen) {
+      return;
+    }
+
+    const target = notesObserverTarget.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && notesHasNext && !isLoadingNotes) {
+          fetchNotes(notesNextCursor, true);
+        }
+      },
+      { rootMargin: "100px" },
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isNoteModalOpen, notesHasNext, notesNextCursor, isLoadingNotes, fetchNotes]);
+
   // 시도 목록 조회
   useEffect(() => {
     const controller = new AbortController();
@@ -399,6 +527,38 @@ export default function SolvePage() {
     };
   }, [problemKey.site, problemKey.siteProblemId]);
 
+  const openNoteModal = () => {
+    setSelectedNoteSlugs([]);
+    setNoteSearch("");
+    setSubmitError(null);
+    setIsNoteModalOpen(true);
+  };
+
+  const closeNoteModal = () => {
+    setIsNoteModalOpen(false);
+    setNotesError(null);
+  };
+
+  const toggleNoteSlug = (slug: string) => {
+    setSelectedNoteSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((item) => item !== slug) : [...prev, slug],
+    );
+  };
+
+  const handleSaveWithNotes = async () => {
+    const isSuccess = await handleSaveDraft(selectedNoteSlugs);
+    if (isSuccess) {
+      setIsNoteModalOpen(false);
+    }
+  };
+
+  const handleSaveWithoutNotes = async () => {
+    const isSuccess = await handleSaveDraft([]);
+    if (isSuccess) {
+      setIsNoteModalOpen(false);
+    }
+  };
+
   const handleAddAttempt = () => {
     const now = new Date();
     const iso = now.toISOString();
@@ -429,14 +589,16 @@ export default function SolvePage() {
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
-  const handleSaveDraft = async () => {
-    if (!draft) return;
+  const handleSaveDraft = async (noteSlugs?: string[]) => {
+    if (!draft) return false;
 
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (!baseUrl) {
       setSubmitError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
       return;
     }
+
+    let isSuccess = false;
 
     try {
       setIsSubmitting(true);
@@ -482,6 +644,7 @@ export default function SolvePage() {
         solution:
           draft.verdict !== "AC" && draft.learnings ? draft.learnings : undefined,
         nextReviewAt,
+        noteSlugs: noteSlugs && noteSlugs.length > 0 ? noteSlugs : undefined,
       };
 
       const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
@@ -559,11 +722,14 @@ export default function SolvePage() {
       };
 
       await fetchAttempts();
+      isSuccess = true;
     } catch (fetchError) {
       setSubmitError((fetchError as Error).message);
     } finally {
       setIsSubmitting(false);
     }
+
+    return isSuccess;
   };
 
   const handleCancelDraft = () => {
@@ -777,7 +943,7 @@ export default function SolvePage() {
                           </button>
                           <button
                             type="button"
-                            onClick={handleSaveDraft}
+                          onClick={openNoteModal}
                             disabled={isSubmitting}
                             className="inline-flex items-center rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
                           >
@@ -947,7 +1113,7 @@ export default function SolvePage() {
                         </button>
                         <button
                           type="button"
-                          onClick={handleSaveDraft}
+                          onClick={openNoteModal}
                           disabled={isSubmitting}
                           className="inline-flex items-center rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
                         >
@@ -1087,6 +1253,166 @@ export default function SolvePage() {
           <p className="text-sm font-medium">풀이 작성 영역은 곧 연결됩니다.</p>
           <p className="text-xs">현재는 예시 데이터로 표시 중입니다. 원하시는 UI를 알려주세요.</p>
         </section>
+
+        {isNoteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 backdrop-blur">
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+            >
+              <header className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                    DS&A
+                  </p>
+                  <h2 className="mt-1 text-2xl font-semibold text-zinc-900">
+                    연결할 알고리즘 노트 선택
+                  </h2>
+                  <p className="mt-2 text-sm text-zinc-600">
+                    관련 노트를 선택해 시도 기록과 연결하세요.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeNoteModal}
+                  aria-label="모달 닫기"
+                  className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600"
+                >
+                  닫기
+                </button>
+              </header>
+
+              <div className="space-y-4 px-6 py-6">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  노트 검색
+                </label>
+                <input
+                  type="search"
+                  placeholder="노트 제목으로 검색"
+                  value={noteSearch}
+                  onChange={(event) => setNoteSearch(event.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-300 focus:ring-2 focus:ring-zinc-200"
+                />
+
+                <div className="min-h-[200px] max-h-[300px] overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                  {isLoadingNotes ? (
+                    <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      노트 목록을 불러오는 중입니다...
+                    </div>
+                  ) : notesError ? (
+                    <p className="text-center text-sm text-rose-500">{notesError}</p>
+                  ) : algoNotes.length === 0 ? (
+                    <p className="text-center text-sm text-zinc-500">
+                      검색 조건에 맞는 노트가 없습니다.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {algoNotes.map((note) => {
+                        const isSelected = selectedNoteSlugs.includes(note.slug);
+                        return (
+                          <button
+                            key={note.slug}
+                            type="button"
+                            onClick={() => toggleNoteSlug(note.slug)}
+                            className={`flex w-full items-start justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
+                              isSelected
+                                ? "border-zinc-900 bg-zinc-900 text-white"
+                                : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300"
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <p className="font-semibold">{note.title}</p>
+                              <p
+                                className={`text-xs ${
+                                  isSelected ? "text-white/70" : "text-zinc-400"
+                                }`}
+                              >
+                                {note.slug}
+                              </p>
+                            </div>
+                            <span className="text-xs font-semibold">
+                              {isSelected ? "선택됨" : "선택"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      <div ref={notesObserverTarget} />
+                    </div>
+                  )}
+                </div>
+
+                {selectedNoteSlugs.length > 0 && (
+                  <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      선택한 노트
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedNoteSlugs.map((slug) => (
+                        <span
+                          key={slug}
+                          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white"
+                        >
+                          {slug}
+                          <button
+                            type="button"
+                            onClick={() => toggleNoteSlug(slug)}
+                            aria-label={`${slug} 제거`}
+                            className="text-white/70 transition hover:text-white"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <footer className="flex flex-col gap-3 border-t border-zinc-200 px-6 py-5">
+                {submitError ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
+                    <p className="font-medium">{submitError}</p>
+                  </div>
+                ) : null}
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={closeNoteModal}
+                    disabled={isSubmitting}
+                    className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveWithoutNotes}
+                    disabled={isSubmitting}
+                    className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    선택 없이 저장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveWithNotes}
+                    disabled={isSubmitting || selectedNoteSlugs.length === 0}
+                    className="inline-flex items-center rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                        저장 중...
+                      </>
+                    ) : (
+                      "연결하고 저장"
+                    )}
+                  </button>
+                </div>
+              </footer>
+            </div>
+          </div>
+        )}
       </div>
   );
 }
