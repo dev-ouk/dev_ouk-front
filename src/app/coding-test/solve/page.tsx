@@ -48,6 +48,27 @@ type ProblemDetailResponse = {
   };
 };
 
+// API 응답 타입 (시도 목록)
+type AttemptItemResponse = {
+  attemptUuid: string;
+  timeSpent: number | null;
+  language: string | null;
+  notes: string | null;
+  verdict: string | null;
+  code: string | null;
+  attemptedAt: string;
+  failType: string | null;
+  failDetail: string | null;
+  solution: string | null;
+  nextReviewAt: string | null;
+};
+
+type AttemptsListResponse = {
+  total: number;
+  items: AttemptItemResponse[];
+};
+
+// 프론트엔드에서 사용하는 Attempt 타입
 type Attempt = {
   verdict: string;
   attemptedAt: string;
@@ -189,6 +210,34 @@ function convertDateToIsoOffsetDateTime(dateString: string): string {
   return `${date.toISOString().slice(0, 19)}${sign}${hours}:${minutes}`;
 }
 
+// ISO_OFFSET_DATE_TIME을 YYYY-MM-DD로 변환
+function convertIsoOffsetDateTimeToDate(isoString: string | null): string {
+  if (!isoString) return "";
+  try {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().split("T")[0];
+  } catch {
+    return "";
+  }
+}
+
+// API 응답을 프론트엔드 Attempt 타입으로 변환
+function mapAttemptItemToAttempt(item: AttemptItemResponse): Attempt {
+  return {
+    verdict: item.verdict ?? "AC",
+    attemptedAt: item.attemptedAt,
+    duration: item.timeSpent != null ? `${item.timeSpent}` : "0",
+    language: item.language ?? "Java",
+    summary: item.notes ?? "",
+    code: item.code ?? undefined,
+    failureCategory: item.failType ?? undefined,
+    failureReason: item.failDetail ?? undefined,
+    learnings: item.solution ?? undefined,
+    nextReview: convertIsoOffsetDateTimeToDate(item.nextReviewAt),
+  };
+}
+
 export default function SolvePage() {
   const [activeTab, setActiveTab] = useState(0);
   const [draft, setDraft] = useState<Attempt | null>(null);
@@ -310,11 +359,26 @@ export default function SolvePage() {
         );
 
         if (!response.ok) {
+          if (response.status === 400) {
+            const errorData = (await response.json()) as {
+              code?: string;
+              message?: string;
+            };
+            throw new Error(errorData.message || "잘못된 요청입니다.");
+          } else if (response.status === 404) {
+            const errorData = (await response.json()) as {
+              code?: string;
+              message?: string;
+            };
+            throw new Error(errorData.message || "해당 문제를 찾을 수 없습니다.");
+          }
           throw new Error(`시도 목록을 불러올 수 없습니다. (status: ${response.status})`);
         }
 
-        const payload = (await response.json()) as { items?: Attempt[] };
-        setAttempts(payload.items ?? []);
+        const payload = (await response.json()) as AttemptsListResponse;
+        // API 응답을 프론트엔드 타입으로 변환
+        const mappedAttempts = payload.items.map(mapAttemptItemToAttempt);
+        setAttempts(mappedAttempts);
       } catch (fetchError) {
         if ((fetchError as Error).name === "AbortError") {
           return;
@@ -485,8 +549,9 @@ export default function SolvePage() {
         );
 
         if (listResponse.ok) {
-          const payload = (await listResponse.json()) as { items?: Attempt[] };
-          const updatedAttempts = payload.items ?? [];
+          const listPayload = (await listResponse.json()) as AttemptsListResponse;
+          // API 응답을 프론트엔드 타입으로 변환
+          const updatedAttempts = listPayload.items.map(mapAttemptItemToAttempt);
           setAttempts(updatedAttempts);
           // 새로 추가된 시도 탭으로 이동
           setActiveTab(updatedAttempts.length - 1);
