@@ -694,6 +694,35 @@ export default function SolvePage() {
         siteProblemId: string;
       };
 
+      if (noteSlugs && noteSlugs.length > 0) {
+        const linkResponse = await fetch(
+          `${normalizedBaseUrl}/api/v1/attempts/${encodeURIComponent(result.attemptUuid)}/algo-notes`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ algoNoteSlugs: noteSlugs }),
+          },
+        );
+
+        if (!linkResponse.ok) {
+          let linkErrorMessage = "알고리즘 노트 연결에 실패했습니다.";
+          if (linkResponse.status === 400 || linkResponse.status === 404) {
+            const linkErrorData = (await linkResponse.json()) as {
+              errorCode?: string;
+              message?: string;
+              details?: Record<string, unknown>;
+            };
+            linkErrorMessage = linkErrorData.message || linkErrorMessage;
+          } else if (linkResponse.status >= 500) {
+            linkErrorMessage = `서버 오류가 발생했습니다. ${linkErrorMessage}`;
+          }
+
+          throw new Error(linkErrorMessage);
+        }
+      }
+
       // 성공 시 draft 초기화하고 시도 목록 다시 불러오기
       setDraft(null);
       setIsEditing(false);
