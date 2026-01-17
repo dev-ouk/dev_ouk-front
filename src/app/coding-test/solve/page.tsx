@@ -72,6 +72,17 @@ type AttemptsListResponse = {
   items: AttemptItemResponse[];
 };
 
+type AttemptAlgoNoteSummary = {
+  slug: string;
+  title: string;
+  createdAt: string | null;
+};
+
+type AttemptAlgoNotesResponse = {
+  total: number;
+  items: AttemptAlgoNoteSummary[];
+};
+
 type AlgoNoteSummary = {
   slug: string;
   title: string;
@@ -96,6 +107,7 @@ type AlgoNotesResponse = {
 
 // 프론트엔드에서 사용하는 Attempt 타입
 type Attempt = {
+  attemptUuid?: string;
   verdict: string;
   attemptedAt: string;
   duration: string;
@@ -106,10 +118,6 @@ type Attempt = {
   failureReason?: string;
   learnings?: string;
   nextReview?: string;
-  linkedNotes?: Array<{
-    slug: string;
-    title?: string | null;
-  }>;
 };
 
 const SITE_META: Record<
@@ -255,6 +263,7 @@ function convertIsoOffsetDateTimeToDate(isoString: string | null): string {
 // API 응답을 프론트엔드 Attempt 타입으로 변환
 function mapAttemptItemToAttempt(item: AttemptItemResponse): Attempt {
   return {
+    attemptUuid: item.attemptUuid,
     verdict: item.verdict ?? "AC",
     attemptedAt: item.attemptedAt,
     duration: item.timeSpent != null ? `${item.timeSpent}` : "0",
@@ -265,10 +274,6 @@ function mapAttemptItemToAttempt(item: AttemptItemResponse): Attempt {
     failureReason: item.failDetail ?? undefined,
     learnings: item.solution ?? undefined,
     nextReview: convertIsoOffsetDateTimeToDate(item.nextReviewAt),
-    linkedNotes: item.algoNotes?.map((note) => ({
-      slug: note.slug,
-      title: note.title ?? null,
-    })),
   };
 }
 
@@ -293,6 +298,9 @@ export default function SolvePage() {
   const [notesHasNext, setNotesHasNext] = useState(false);
   const [notesNextCursor, setNotesNextCursor] = useState<string | null>(null);
   const notesObserverTarget = useRef<HTMLDivElement | null>(null);
+  const [attemptAlgoNotes, setAttemptAlgoNotes] = useState<AttemptAlgoNoteSummary[]>([]);
+  const [isLoadingAttemptNotes, setIsLoadingAttemptNotes] = useState(false);
+  const [attemptNotesError, setAttemptNotesError] = useState<string | null>(null);
   const searchParams = useSearchParams();
 
   // URL 쿼리에서 문제 식별 정보만 가져오기
@@ -303,6 +311,9 @@ export default function SolvePage() {
   }, [searchParams]);
 
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const displayAttempts = isEditing && draft ? [...attempts, draft] : attempts;
+  const selectedAttempt = displayAttempts[activeTab];
+  const isDraftSelected = isEditing && draft && activeTab === attempts.length;
 
   // 문제 정보 조회
   useEffect(() => {
@@ -370,6 +381,65 @@ export default function SolvePage() {
       controller.abort();
     };
   }, [problemKey.site, problemKey.siteProblemId]);
+
+  useEffect(() => {
+    if (!selectedAttempt?.attemptUuid || isDraftSelected) {
+      setAttemptAlgoNotes([]);
+      setAttemptNotesError(null);
+      setIsLoadingAttemptNotes(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchAttemptNotes = async () => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!baseUrl) {
+        setAttemptNotesError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+        setIsLoadingAttemptNotes(false);
+        return;
+      }
+
+      try {
+        setIsLoadingAttemptNotes(true);
+        setAttemptNotesError(null);
+
+        const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        const response = await fetch(
+          `${normalizedBaseUrl}/api/v1/attempts/${encodeURIComponent(selectedAttempt.attemptUuid!)}/algo-notes`,
+          {
+            method: "GET",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("시도에 연결된 노트를 찾을 수 없습니다.");
+          }
+          throw new Error(`연결된 노트를 불러올 수 없습니다. (status: ${response.status})`);
+        }
+
+        const payload = (await response.json()) as AttemptAlgoNotesResponse;
+        setAttemptAlgoNotes(payload.items ?? []);
+      } catch (fetchError) {
+        if ((fetchError as Error).name === "AbortError") {
+          return;
+        }
+        setAttemptNotesError((fetchError as Error).message);
+        setAttemptAlgoNotes([]);
+      } finally {
+        setIsLoadingAttemptNotes(false);
+      }
+    };
+
+    fetchAttemptNotes();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedAttempt?.attemptUuid, isDraftSelected]);
 
   const fetchNotes = useCallback(
     async (cursor?: string | null, append = false) => {
@@ -736,8 +806,8 @@ export default function SolvePage() {
       }
 
       // 성공 시 draft 초기화하고 시도 목록 다시 불러오기
-      setDraft(null);
-      setIsEditing(false);
+    setDraft(null);
+    setIsEditing(false);
 
       // 시도 목록을 다시 불러와서 최신 데이터로 갱신
       const fetchAttempts = async () => {
@@ -817,13 +887,10 @@ export default function SolvePage() {
   };
 
   const meta = getMeta(problemData.site);
-  const displayAttempts = isEditing && draft ? [...attempts, draft] : attempts;
-  const selectedAttempt = displayAttempts[activeTab];
-  const isDraftSelected = isEditing && draft && activeTab === attempts.length;
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
         <div className="flex justify-between">
           <Link
             href="/coding-test"
@@ -839,28 +906,28 @@ export default function SolvePage() {
             <p className="font-medium">{problemError}</p>
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-4 border-b border-zinc-200 pb-4">
-            {meta.logoSrc ? (
-              <Image
-                src={meta.logoSrc}
-                alt={`${meta.name} 로고`}
-                width={48}
-                height={48}
-                className="h-12 w-12 rounded-lg"
-              />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-200 text-sm font-semibold text-zinc-600">
+        <div className="flex flex-wrap items-center gap-4 border-b border-zinc-200 pb-4">
+          {meta.logoSrc ? (
+            <Image
+              src={meta.logoSrc}
+              alt={`${meta.name} 로고`}
+              width={48}
+              height={48}
+              className="h-12 w-12 rounded-lg"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-200 text-sm font-semibold text-zinc-600">
                 {problemData.site?.[0]?.toUpperCase() ?? "?"}
-              </div>
-            )}
+            </div>
+          )}
 
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2 text-sm text-zinc-500">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-2 text-sm text-zinc-500">
                 <span className="font-mono text-xs">{problemData.siteProblemId}</span>
-                <span className="text-xs text-zinc-400">·</span>
-                <span>{meta.name}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs text-zinc-400">·</span>
+              <span>{meta.name}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
                 {isLoadingProblem ? (
                   <div className="flex items-center gap-2 text-zinc-500">
                     <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -872,46 +939,46 @@ export default function SolvePage() {
                     {problemData.difficulty != null && (
                       <>
                         {problemData.site?.toUpperCase() === "BAEKJOON" ? (
-                          <Image
+                    <Image
                             src={`https://static.solved.ac/tier_small/${problemData.difficulty}.svg`}
-                            alt="난이도"
-                            width={32}
-                            height={32}
-                            className="h-8 w-8"
-                            unoptimized
-                          />
-                        ) : (
-                          <span
-                            className="inline-flex items-center rounded-full border border-current px-3 py-1 text-sm font-semibold uppercase"
-                            style={{
+                      alt="난이도"
+                      width={32}
+                      height={32}
+                      className="h-8 w-8"
+                      unoptimized
+                    />
+                  ) : (
+                    <span
+                      className="inline-flex items-center rounded-full border border-current px-3 py-1 text-sm font-semibold uppercase"
+                      style={{
                               color: PROGRAMMERS_LEVEL_COLORS[problemData.difficulty] ?? "#1bbaff",
-                            }}
-                          >
+                      }}
+                    >
                             Lv. {problemData.difficulty}
-                          </span>
+                    </span>
                         )}
                       </>
-                    )}
-                  </>
-                )}
-              </div>
+                  )}
+                </>
+              )}
+            </div>
               {problemData.lastAttempt && (() => {
                 const verdictDisplay = getVerdictDisplay(problemData.lastAttempt.verdict);
-                const Icon = verdictDisplay.Icon;
-                return (
-                  <div className="flex items-center gap-2 text-xs text-zinc-600">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 font-semibold ${verdictDisplay.className}`}
-                    >
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                      {verdictDisplay.label}
-                    </span>
-                    <span className="text-[11px] text-zinc-500">
+              const Icon = verdictDisplay.Icon;
+              return (
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 font-semibold ${verdictDisplay.className}`}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {verdictDisplay.label}
+                  </span>
+                  <span className="text-[11px] text-zinc-500">
                       최근 시도: {formatAttemptedAt(problemData.lastAttempt.attemptedAt)}
-                    </span>
-                  </div>
-                );
-              })()}
+                  </span>
+                </div>
+              );
+            })()}
               {problemData.taxonomies?.algo && problemData.taxonomies.algo.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {problemData.taxonomies.algo.map((term: TaxonomyTerm) => (
@@ -922,9 +989,9 @@ export default function SolvePage() {
                       {term.name}
                     </span>
                   ))}
-                </div>
+          </div>
               )}
-            </div>
+        </div>
           </div>
         )}
 
@@ -970,24 +1037,24 @@ export default function SolvePage() {
             ) : isEditing && draft ? (
               // 편집 중이고 draft가 있으면 무조건 draft 폼 표시 (최우선)
               (() => {
-                  return (
-                    <div className="space-y-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-4">
-                      <div className="flex items-center justify-between pb-1">
-                        <div className="space-y-1">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Attempt</p>
-                          <h2 className="text-lg font-semibold text-zinc-900">새 시도 작성</h2>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={handleCancelDraft}
+                return (
+                  <div className="space-y-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-4">
+                    <div className="flex items-center justify-between pb-1">
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Attempt</p>
+                        <h2 className="text-lg font-semibold text-zinc-900">새 시도 작성</h2>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelDraft}
                             disabled={isSubmitting}
                             className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            취소
-                          </button>
-                          <button
-                            type="button"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
                           onClick={openNoteModal}
                             disabled={isSubmitting}
                             className="inline-flex items-center rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
@@ -1000,9 +1067,9 @@ export default function SolvePage() {
                             ) : (
                               "저장"
                             )}
-                          </button>
-                        </div>
+                        </button>
                       </div>
+                    </div>
                       {submitError && (
                         <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
                           <p className="font-medium">{submitError}</p>
@@ -1147,17 +1214,17 @@ export default function SolvePage() {
                       ) : null}
                     </div>
 
-                      <div className="mt-4 flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={handleCancelDraft}
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCancelDraft}
                           disabled={isSubmitting}
                           className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          취소
-                        </button>
-                        <button
-                          type="button"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
                           onClick={openNoteModal}
                           disabled={isSubmitting}
                           className="inline-flex items-center rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-300"
@@ -1170,10 +1237,10 @@ export default function SolvePage() {
                           ) : (
                             "저장"
                           )}
-                        </button>
-                      </div>
+                      </button>
                     </div>
-                  );
+                  </div>
+                );
               })()
             ) : error ? (
               <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
@@ -1194,20 +1261,20 @@ export default function SolvePage() {
                       <p className="text-sm font-medium">시도를 선택해주세요.</p>
                     </div>
                   );
-                }
+              }
 
-                const verdictDisplay = getVerdictDisplay(attempt.verdict);
-                const Icon = verdictDisplay.Icon;
-                return (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <Icon className={`h-4 w-4 ${verdictDisplay.className}`} aria-hidden="true" />
-                      <span className="text-xs text-zinc-500">
+              const verdictDisplay = getVerdictDisplay(attempt.verdict);
+              const Icon = verdictDisplay.Icon;
+              return (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Icon className={`h-4 w-4 ${verdictDisplay.className}`} aria-hidden="true" />
+                    <span className="text-xs text-zinc-500">
                         시도 일시: {formatAttemptedAt(attempt.attemptedAt)}
-                      </span>
-                      <span className="text-xs text-zinc-500">· 풀이 시간 {attempt.duration}</span>
-                      <span className="text-xs text-zinc-500">· 사용 언어 {attempt.language}</span>
-                    </div>
+                    </span>
+                    <span className="text-xs text-zinc-500">· 풀이 시간 {attempt.duration}</span>
+                    <span className="text-xs text-zinc-500">· 사용 언어 {attempt.language}</span>
+                  </div>
 
                   <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                     <div className="text-base font-semibold text-zinc-800">시도 결과</div>
@@ -1317,7 +1384,7 @@ export default function SolvePage() {
                   <p className="mt-2 text-sm text-zinc-600">
                     관련 노트를 선택해 시도 기록과 연결하세요.
                   </p>
-                </div>
+      </div>
                 <button
                   type="button"
                   onClick={closeNoteModal}
@@ -1473,8 +1540,12 @@ export default function SolvePage() {
                 </p>
               ) : !selectedAttempt ? (
                 <p className="text-xs text-zinc-500">시도를 선택해주세요.</p>
-              ) : selectedAttempt.linkedNotes && selectedAttempt.linkedNotes.length > 0 ? (
-                selectedAttempt.linkedNotes.map((note) => (
+              ) : isLoadingAttemptNotes ? (
+                <p className="text-xs text-zinc-500">연결된 노트를 불러오는 중...</p>
+              ) : attemptNotesError ? (
+                <p className="text-xs text-rose-500">{attemptNotesError}</p>
+              ) : attemptAlgoNotes.length > 0 ? (
+                attemptAlgoNotes.map((note) => (
                   <div
                     key={note.slug}
                     className="rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700"
