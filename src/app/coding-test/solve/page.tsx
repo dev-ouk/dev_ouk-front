@@ -1546,15 +1546,16 @@ export default function SolvePage() {
                 <p className="text-xs text-rose-500">{attemptNotesError}</p>
               ) : attemptAlgoNotes.length > 0 ? (
                 attemptAlgoNotes.map((note) => (
-                  <div
+                  <Link
                     key={note.slug}
-                    className="rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700"
+                    href={`/coding-test/dsa/${note.slug}`}
+                    className="block rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
                   >
                     <div className="font-semibold text-zinc-900">
                       {note.title || note.slug}
                     </div>
                     <div className="mt-1 text-[11px] text-zinc-400">{note.slug}</div>
-                  </div>
+                  </Link>
                 ))
               ) : (
                 <p className="text-xs text-zinc-500">연결된 노트가 없습니다.</p>
