@@ -77,6 +77,20 @@ type ProblemCandidatesResponse = {
   nextCursor: string | null;
 };
 
+type ActivityHeatmapItem = {
+  date: string;
+  count: number;
+};
+
+type ActivityHeatmapResponse = {
+  type: string;
+  from: string;
+  to: string;
+  timeZone: string;
+  total: number;
+  items: ActivityHeatmapItem[];
+};
+
 type AlgoNote = {
   slug: string;
   title: string;
@@ -219,6 +233,75 @@ function getVerdictDisplay(verdict?: string | null) {
   };
 }
 
+function formatDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getHeatmapLevel(count: number, maxCount: number) {
+  if (count <= 0) return 0;
+  if (maxCount <= 1) return 1;
+  const ratio = count / maxCount;
+  if (ratio <= 0.25) return 1;
+  if (ratio <= 0.5) return 2;
+  if (ratio <= 0.75) return 3;
+  return 4;
+}
+
+function buildHeatmapWeeks(from: Date, to: Date) {
+  const start = startOfDay(from);
+  const end = startOfDay(to);
+  const dayOfWeek = start.getDay(); // 0=Sun
+  const gridStart = addDays(start, -dayOfWeek);
+  const weeks: Date[][] = [];
+
+  let cursor = gridStart;
+  while (cursor <= end || cursor.getDay() !== 0) {
+    const week: Date[] = [];
+    for (let i = 0; i < 7; i += 1) {
+      week.push(cursor);
+      cursor = addDays(cursor, 1);
+    }
+    weeks.push(week);
+  }
+
+  return weeks;
+}
+
+function buildMonthLabels(weeks: Date[][]) {
+  const labels: Array<{ month: string; weekIndex: number }> = [];
+  let lastMonth = -1;
+
+  weeks.forEach((week, weekIndex) => {
+    const firstOfMonth = week.find((day) => day.getDate() === 1);
+    if (!firstOfMonth) {
+      return;
+    }
+    const monthIndex = firstOfMonth.getMonth();
+    if (monthIndex !== lastMonth) {
+      labels.push({
+        month: firstOfMonth.toLocaleString("en-US", { month: "short" }),
+        weekIndex,
+      });
+      lastMonth = monthIndex;
+    }
+  });
+
+  return labels;
+}
+
 type TabType = "problems" | "dsa";
 
 export default function CodingTestPage() {
@@ -229,6 +312,11 @@ export default function CodingTestPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
+  const [heatmapRange, setHeatmapRange] = useState("recent");
+  const [heatmapData, setHeatmapData] = useState<ActivityHeatmapItem[]>([]);
+  const [heatmapTotal, setHeatmapTotal] = useState(0);
+  const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
+  const [heatmapError, setHeatmapError] = useState<string | null>(null);
 
   // DS&A 노트 상태
   const [algoNotes, setAlgoNotes] = useState<AlgoNote[]>([]);
@@ -237,6 +325,23 @@ export default function CodingTestPage() {
   const [hasNextNotes, setHasNextNotes] = useState(false);
   const [nextCursorNotes, setNextCursorNotes] = useState<string | null>(null);
   const observerTarget = useRef<HTMLDivElement>(null);
+  const now = useMemo(() => new Date(), []);
+  const heatmapYearOptions = useMemo(() => {
+    const currentYear = now.getFullYear();
+    return Array.from({ length: 5 }, (_, idx) => String(currentYear - idx));
+  }, [now]);
+
+  const heatmapRangeDates = useMemo(() => {
+    if (heatmapRange === "recent") {
+      const to = startOfDay(now);
+      const from = addDays(to, -364);
+      return { from, to };
+    }
+    const year = Number(heatmapRange);
+    const from = new Date(year, 0, 1);
+    const to = new Date(year, 11, 31);
+    return { from, to };
+  }, [heatmapRange, now]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -286,6 +391,65 @@ export default function CodingTestPage() {
       controller.abort();
     };
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchHeatmap = async () => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!baseUrl) {
+        setHeatmapError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
+        setIsLoadingHeatmap(false);
+        return;
+      }
+
+      try {
+        setIsLoadingHeatmap(true);
+        setHeatmapError(null);
+
+        const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        const params = new URLSearchParams({
+          type: "CODING_TEST",
+          from: formatDateKey(heatmapRangeDates.from),
+          to: formatDateKey(heatmapRangeDates.to),
+          groupBy: "DAY",
+          timeZone: "Asia/Seoul",
+        });
+
+        const response = await fetch(
+          `${normalizedBaseUrl}/api/v1/activities?${params.toString()}`,
+          {
+            method: "GET",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`잔디 데이터를 불러올 수 없습니다. (status: ${response.status})`);
+        }
+
+        const payload = (await response.json()) as ActivityHeatmapResponse;
+        setHeatmapData(payload.items ?? []);
+        setHeatmapTotal(payload.total ?? 0);
+      } catch (fetchError) {
+        if ((fetchError as Error).name === "AbortError") {
+          return;
+        }
+        setHeatmapError((fetchError as Error).message);
+        setHeatmapData([]);
+        setHeatmapTotal(0);
+      } finally {
+        setIsLoadingHeatmap(false);
+      }
+    };
+
+    fetchHeatmap();
+
+    return () => {
+      controller.abort();
+    };
+  }, [heatmapRangeDates]);
 
   // DS&A 노트 목록 조회
   const fetchAlgoNotes = useCallback(
@@ -377,6 +541,29 @@ export default function CodingTestPage() {
       }
     };
   }, [activeTab, hasNextNotes, isLoadingNotes, nextCursorNotes, fetchAlgoNotes]);
+
+  const heatmapMap = useMemo(() => {
+    const map = new Map<string, number>();
+    heatmapData.forEach((item) => {
+      map.set(item.date, item.count);
+    });
+    return map;
+  }, [heatmapData]);
+
+  const heatmapMaxCount = useMemo(() => {
+    if (heatmapData.length === 0) return 0;
+    return Math.max(...heatmapData.map((item) => item.count));
+  }, [heatmapData]);
+
+  const heatmapWeeks = useMemo(
+    () => buildHeatmapWeeks(heatmapRangeDates.from, heatmapRangeDates.to),
+    [heatmapRangeDates],
+  );
+
+  const heatmapMonthLabels = useMemo(
+    () => buildMonthLabels(heatmapWeeks),
+    [heatmapWeeks],
+  );
 
   const content = useMemo(() => {
     if (isLoading) {
@@ -523,33 +710,37 @@ export default function CodingTestPage() {
                       지난 1년간의 문제 풀이 기록
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-zinc-900">156일</p>
-                    <p className="text-xs text-zinc-500">총 풀이일</p>
+                  <div className="flex items-center gap-4">
+                    <select
+                      value={heatmapRange}
+                      onChange={(event) => setHeatmapRange(event.target.value)}
+                      className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 outline-none focus:border-zinc-300"
+                    >
+                      <option value="recent">최근</option>
+                      {heatmapYearOptions.map((year) => (
+                        <option key={year} value={year}>
+                          {year}년
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-zinc-900">{heatmapTotal}일</p>
+                      <p className="text-xs text-zinc-500">총 풀이일</p>
+                    </div>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
                   <div className="inline-block">
                     {/* 월 라벨 (상단) */}
-                    <div className="mb-2 flex gap-1 pl-7">
-                      {[
-                        { month: "Jan", startWeek: 0 },
-                        { month: "Feb", startWeek: 4 },
-                        { month: "Mar", startWeek: 8 },
-                        { month: "Apr", startWeek: 13 },
-                        { month: "May", startWeek: 17 },
-                        { month: "Jun", startWeek: 22 },
-                        { month: "Jul", startWeek: 26 },
-                        { month: "Aug", startWeek: 31 },
-                        { month: "Sep", startWeek: 35 },
-                        { month: "Oct", startWeek: 40 },
-                        { month: "Nov", startWeek: 44 },
-                        { month: "Dec", startWeek: 48 },
-                      ].map(({ month, startWeek }) => (
+                    <div
+                      className="mb-2 grid gap-1 pl-7"
+                      style={{ gridTemplateColumns: `repeat(${heatmapWeeks.length}, 12px)` }}
+                    >
+                      {heatmapMonthLabels.map(({ month, weekIndex }) => (
                         <div
-                          key={month}
+                          key={`${month}-${weekIndex}`}
                           className="text-xs text-zinc-500"
-                          style={{ marginLeft: `${startWeek * 13}px` }}
+                          style={{ gridColumnStart: weekIndex + 1 }}
                         >
                           {month}
                         </div>
@@ -559,19 +750,23 @@ export default function CodingTestPage() {
                     <div className="flex gap-1">
                       {/* 요일 라벨 (왼쪽, 선택적) */}
                       <div className="flex flex-col gap-1 pt-0.5">
-                        <div className="h-3" />
                         {["", "Mon", "", "Wed", "", "Fri", ""].map((day, index) => (
                           <div key={index} className="h-3 text-xs text-zinc-400">
                             {day}
                           </div>
                         ))}
                       </div>
-                      {/* 7행 x 53열 그리드 */}
+                      {/* 7행 x N열 그리드 */}
                       <div className="flex flex-col gap-1">
                         {Array.from({ length: 7 }, (_, rowIndex) => (
                           <div key={rowIndex} className="flex gap-1">
-                            {Array.from({ length: 53 }, (_, weekIndex) => {
-                              const level = Math.floor(Math.random() * 5);
+                            {heatmapWeeks.map((week, weekIndex) => {
+                              const day = week[rowIndex];
+                              const isInRange =
+                                day >= heatmapRangeDates.from && day <= heatmapRangeDates.to;
+                              const dateKey = formatDateKey(day);
+                              const count = isInRange ? heatmapMap.get(dateKey) ?? 0 : 0;
+                              const level = getHeatmapLevel(count, heatmapMaxCount);
                               const colors = [
                                 "bg-zinc-100",
                                 "bg-emerald-200",
@@ -579,11 +774,20 @@ export default function CodingTestPage() {
                                 "bg-emerald-600",
                                 "bg-emerald-800",
                               ];
+                              if (!isInRange) {
+                                return (
+                                  <div
+                                    key={`${weekIndex}-${rowIndex}`}
+                                    className="h-3 w-3"
+                                  />
+                                );
+                              }
+
                               return (
                                 <div
-                                  key={weekIndex}
+                                  key={`${weekIndex}-${rowIndex}`}
                                   className={`h-3 w-3 rounded ${colors[level]} transition hover:ring-2 hover:ring-zinc-400`}
-                                  title={`Week ${weekIndex + 1}, Day ${rowIndex + 1}`}
+                                  title={`${dateKey} • ${count}회`}
                                 />
                               );
                             })}
@@ -593,16 +797,28 @@ export default function CodingTestPage() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-end gap-4 text-xs text-zinc-500">
-                  <span>Less</span>
-                  <div className="flex gap-1">
-                    <div className="h-3 w-3 rounded bg-zinc-100" />
-                    <div className="h-3 w-3 rounded bg-emerald-200" />
-                    <div className="h-3 w-3 rounded bg-emerald-400" />
-                    <div className="h-3 w-3 rounded bg-emerald-600" />
-                    <div className="h-3 w-3 rounded bg-emerald-800" />
+                <div className="mt-4 flex items-center justify-between gap-4 text-xs text-zinc-500">
+                  {isLoadingHeatmap ? (
+                    <span>잔디 데이터를 불러오는 중...</span>
+                  ) : heatmapError ? (
+                    <span className="text-rose-500">{heatmapError}</span>
+                  ) : (
+                    <span>
+                      {formatDateKey(heatmapRangeDates.from)} ~{" "}
+                      {formatDateKey(heatmapRangeDates.to)}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span>Less</span>
+                    <div className="flex gap-1">
+                      <div className="h-3 w-3 rounded bg-zinc-100" />
+                      <div className="h-3 w-3 rounded bg-emerald-200" />
+                      <div className="h-3 w-3 rounded bg-emerald-400" />
+                      <div className="h-3 w-3 rounded bg-emerald-600" />
+                      <div className="h-3 w-3 rounded bg-emerald-800" />
+                    </div>
+                    <span>More</span>
                   </div>
-                  <span>More</span>
                 </div>
               </div>
 
