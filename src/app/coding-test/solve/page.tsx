@@ -61,6 +61,10 @@ type AttemptItemResponse = {
   failDetail: string | null;
   solution: string | null;
   nextReviewAt: string | null;
+  algoNotes?: Array<{
+    slug: string;
+    title?: string | null;
+  }>;
 };
 
 type AttemptsListResponse = {
@@ -102,6 +106,10 @@ type Attempt = {
   failureReason?: string;
   learnings?: string;
   nextReview?: string;
+  linkedNotes?: Array<{
+    slug: string;
+    title?: string | null;
+  }>;
 };
 
 const SITE_META: Record<
@@ -257,6 +265,10 @@ function mapAttemptItemToAttempt(item: AttemptItemResponse): Attempt {
     failureReason: item.failDetail ?? undefined,
     learnings: item.solution ?? undefined,
     nextReview: convertIsoOffsetDateTimeToDate(item.nextReviewAt),
+    linkedNotes: item.algoNotes?.map((note) => ({
+      slug: note.slug,
+      title: note.title ?? null,
+    })),
   };
 }
 
@@ -805,9 +817,13 @@ export default function SolvePage() {
   };
 
   const meta = getMeta(problemData.site);
+  const displayAttempts = isEditing && draft ? [...attempts, draft] : attempts;
+  const selectedAttempt = displayAttempts[activeTab];
+  const isDraftSelected = isEditing && draft && activeTab === attempts.length;
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+    <>
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
         <div className="flex justify-between">
           <Link
             href="/coding-test"
@@ -1443,6 +1459,40 @@ export default function SolvePage() {
           </div>
         )}
       </div>
+      <aside className="hidden xl:block">
+        <div className="fixed top-24 w-[240px] [left:calc(50%+448px+140px)]">
+          <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="border-b border-zinc-200 px-4 py-3">
+              <p className="text-sm font-semibold text-zinc-800">연결된 알고리즘 노트</p>
+              <p className="text-xs text-zinc-500">선택한 시도 기준</p>
+            </div>
+            <div className="space-y-3 px-4 py-4">
+              {isDraftSelected ? (
+                <p className="text-xs text-zinc-500">
+                  작성 중인 시도입니다. 저장 후 연결된 노트를 확인할 수 있어요.
+                </p>
+              ) : !selectedAttempt ? (
+                <p className="text-xs text-zinc-500">시도를 선택해주세요.</p>
+              ) : selectedAttempt.linkedNotes && selectedAttempt.linkedNotes.length > 0 ? (
+                selectedAttempt.linkedNotes.map((note) => (
+                  <div
+                    key={note.slug}
+                    className="rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700"
+                  >
+                    <div className="font-semibold text-zinc-900">
+                      {note.title || note.slug}
+                    </div>
+                    <div className="mt-1 text-[11px] text-zinc-400">{note.slug}</div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-zinc-500">연결된 노트가 없습니다.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }
 
