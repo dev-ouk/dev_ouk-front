@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useState, useEffect } from "react";
-import {ChevronLeft, ChevronRight, Code2, Dumbbell, FolderKanban, Home, LucideIcon, Menu} from "lucide-react";
+import {BookOpen, ChevronLeft, ChevronRight, Code2, Dumbbell, FolderKanban, Home, LucideIcon, Menu} from "lucide-react";
 
 const STORAGE_KEY = "sidebar:isOpen";
 
@@ -38,6 +38,12 @@ const navItems: NavItem[] = [
     label: "Workout",
     icon: Dumbbell,
     href: "/workout",
+  },
+  {
+    id: "reading",
+    label: "Reading",
+    icon: BookOpen,
+    href: "/reading",
   },
 ];
 
