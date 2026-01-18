@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "static.solved.ac",
       },
+      {
+        protocol: "https",
+        hostname: "contents.kyobobook.co.kr",
+      },
     ],
   },
 };
