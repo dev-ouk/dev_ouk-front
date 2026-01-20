@@ -245,8 +245,16 @@ export default function DSANoteDetailPage() {
         setError(null);
 
         const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+        const safeSlug = (() => {
+          try {
+            return decodeURIComponent(slug);
+          } catch {
+            return slug;
+          }
+        })();
+
         const response = await fetch(
-          `${normalizedBaseUrl}/api/v1/algo-notes/${encodeURIComponent(slug)}`,
+          `${normalizedBaseUrl}/api/v1/algo-notes/${encodeURIComponent(safeSlug)}`,
           {
             method: "GET",
             signal: controller.signal,
