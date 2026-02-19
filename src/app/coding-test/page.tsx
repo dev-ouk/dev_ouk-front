@@ -309,7 +309,10 @@ export default function CodingTestPage() {
   const [activeTab, setActiveTab] = useState<TabType>("problems");
   const [problems, setProblems] = useState<Problem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMoreProblems, setIsLoadingMoreProblems] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasNextProblems, setHasNextProblems] = useState(false);
+  const [nextCursorProblems, setNextCursorProblems] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
   const [heatmapRange, setHeatmapRange] = useState("recent");
@@ -324,7 +327,9 @@ export default function CodingTestPage() {
   const [notesError, setNotesError] = useState<string | null>(null);
   const [hasNextNotes, setHasNextNotes] = useState(false);
   const [nextCursorNotes, setNextCursorNotes] = useState<string | null>(null);
+  const problemsObserverTarget = useRef<HTMLDivElement>(null);
   const observerTarget = useRef<HTMLDivElement>(null);
+  const isFetchingMoreProblemsRef = useRef(false);
   const now = useMemo(() => new Date(), []);
   const heatmapYearOptions = useMemo(() => {
     const currentYear = now.getFullYear();
@@ -343,25 +348,44 @@ export default function CodingTestPage() {
     return { from, to };
   }, [heatmapRange, now]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchProblems = async () => {
+  const fetchProblems = useCallback(
+    async (cursor?: string | null, append = false, signal?: AbortSignal) => {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
       if (!baseUrl) {
         setError("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되어 있지 않습니다.");
-        setIsLoading(false);
+        if (append) {
+          isFetchingMoreProblemsRef.current = false;
+          setIsLoadingMoreProblems(false);
+        } else {
+          setIsLoading(false);
+        }
         return;
       }
 
-      try {
+      if (append) {
+        if (isFetchingMoreProblemsRef.current) {
+          return;
+        }
+        isFetchingMoreProblemsRef.current = true;
+        setIsLoadingMoreProblems(true);
+      } else {
         setIsLoading(true);
         setError(null);
+      }
 
+      try {
         const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
-        const response = await fetch(`${normalizedBaseUrl}/api/v1/problems`, {
+        const params = new URLSearchParams();
+        params.append("size", "20");
+        params.append("sort", "recent_attempt");
+        if (cursor) {
+          params.append("cursor", cursor);
+        }
+
+        const response = await fetch(`${normalizedBaseUrl}/api/v1/problems?${params.toString()}`, {
           method: "GET",
-          signal: controller.signal,
+          signal,
         });
 
         if (!response.ok) {
@@ -369,28 +393,45 @@ export default function CodingTestPage() {
         }
 
         const payload = (await response.json()) as ProblemsResponse | Problem[];
-        if (Array.isArray(payload)) {
-          setProblems(payload);
+        const fetchedProblems = Array.isArray(payload) ? payload : (payload.items ?? []);
+
+        if (append) {
+          setProblems((prev) => [...prev, ...fetchedProblems]);
         } else {
-          setProblems(payload.items ?? []);
+          setProblems(fetchedProblems);
         }
+
+        setHasNextProblems(Array.isArray(payload) ? false : (payload.hasNext ?? false));
+        setNextCursorProblems(Array.isArray(payload) ? null : (payload.nextCursor ?? null));
       } catch (fetchError) {
         if ((fetchError as Error).name === "AbortError") {
           return;
         }
         setError((fetchError as Error).message);
-        setProblems([]);
+        if (!append) {
+          setProblems([]);
+          setHasNextProblems(false);
+          setNextCursorProblems(null);
+        }
       } finally {
-        setIsLoading(false);
+        if (append) {
+          isFetchingMoreProblemsRef.current = false;
+          setIsLoadingMoreProblems(false);
+        } else {
+          setIsLoading(false);
+        }
       }
-    };
+    },
+    [],
+  );
 
-    fetchProblems();
-
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchProblems(null, false, controller.signal);
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [fetchProblems]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -541,6 +582,50 @@ export default function CodingTestPage() {
       }
     };
   }, [activeTab, hasNextNotes, isLoadingNotes, nextCursorNotes, fetchAlgoNotes]);
+
+  // 문제 목록 무한 스크롤: Intersection Observer
+  useEffect(() => {
+    if (
+      activeTab !== "problems" ||
+      !hasNextProblems ||
+      isLoading ||
+      isLoadingMoreProblems ||
+      !nextCursorProblems
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          nextCursorProblems &&
+          !isFetchingMoreProblemsRef.current
+        ) {
+          fetchProblems(nextCursorProblems, true);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    const currentTarget = problemsObserverTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [
+    activeTab,
+    hasNextProblems,
+    isLoading,
+    isLoadingMoreProblems,
+    nextCursorProblems,
+    fetchProblems,
+  ]);
 
   const heatmapMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -937,6 +1022,16 @@ export default function CodingTestPage() {
                 </button>
               </div>
               {content}
+              {hasNextProblems && !error && problems.length > 0 && (
+                <div ref={problemsObserverTarget} className="flex justify-center py-6">
+                  {isLoadingMoreProblems && (
+                    <div className="flex items-center gap-2 text-zinc-500">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      <span className="text-xs">문제를 더 불러오는 중...</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <>
