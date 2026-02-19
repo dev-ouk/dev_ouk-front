@@ -239,25 +239,22 @@ function convertDateToIsoOffsetDateTime(dateString: string): string {
   if (!dateString) return "";
   // 이미 ISO 형식이면 그대로 반환
   if (dateString.includes("T")) return dateString;
-  // YYYY-MM-DD 형식이면 시간 추가
-  const date = new Date(dateString + "T00:00:00");
+  // YYYY-MM-DD 형식이면 로컬 자정 + 로컬 오프셋으로 구성
+  const date = new Date(`${dateString}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
   const offset = -date.getTimezoneOffset();
   const sign = offset >= 0 ? "+" : "-";
   const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0");
   const minutes = String(Math.abs(offset) % 60).padStart(2, "0");
-  return `${date.toISOString().slice(0, 19)}${sign}${hours}:${minutes}`;
+  return `${dateString}T00:00:00${sign}${hours}:${minutes}`;
 }
 
 // ISO_OFFSET_DATE_TIME을 YYYY-MM-DD로 변환
 function convertIsoOffsetDateTimeToDate(isoString: string | null): string {
   if (!isoString) return "";
-  try {
-    const date = new Date(isoString);
-    if (Number.isNaN(date.getTime())) return "";
-    return date.toISOString().split("T")[0];
-  } catch {
-    return "";
-  }
+  // 오프셋 변환 없이 원본의 날짜 파트만 사용해 하루 밀림을 방지
+  const datePart = isoString.split("T")[0];
+  return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : "";
 }
 
 // API 응답을 프론트엔드 Attempt 타입으로 변환
@@ -643,8 +640,11 @@ export default function SolvePage() {
 
   const handleAddAttempt = () => {
     const now = new Date();
-    const iso = now.toISOString();
-    const dateOnly = iso.split("T")[0];
+    const dateOnly = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
 
     const newDraft: Attempt = {
       verdict: "AC",
