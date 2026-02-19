@@ -21,6 +21,7 @@ export default function DSAWritePage() {
   const [search, setSearch] = useState("");
   const [terms, setTerms] = useState<TaxonomyTerm[]>([]);
   const [selectedTerms, setSelectedTerms] = useState<string[]>([]);
+  const [termNameBySlug, setTermNameBySlug] = useState<Record<string, string>>({});
   const [isLoadingTerms, setIsLoadingTerms] = useState(true);
   const [termsError, setTermsError] = useState<string | null>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
@@ -69,8 +70,16 @@ export default function DSAWritePage() {
         const payload = (await response.json()) as {
           items?: TaxonomyTerm[];
         };
-
-        setTerms(payload.items ?? []);
+        const fetchedTerms = payload.items ?? [];
+        setTerms(fetchedTerms);
+        // 검색 결과가 바뀌어도 이미 본 태그 이름은 캐시해 둔다.
+        setTermNameBySlug((prev) => {
+          const next = { ...prev };
+          fetchedTerms.forEach((term) => {
+            next[term.slug] = term.name;
+          });
+          return next;
+        });
       } catch (fetchError) {
         if ((fetchError as Error).name === "AbortError") {
           return;
@@ -346,16 +355,17 @@ export default function DSAWritePage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedTerms.map((slug) => {
                     const term = terms.find((item) => item.slug === slug);
+                    const termName = term?.name ?? termNameBySlug[slug] ?? slug;
                     return (
                       <span
                         key={slug}
                         className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white"
                       >
-                        {term?.name ?? slug}
+                        {termName}
                         <button
                           type="button"
                           onClick={() => toggleTerm(slug)}
-                          aria-label={`${term?.name ?? slug} 태그 제거`}
+                          aria-label={`${termName} 태그 제거`}
                           className="text-white/70 transition hover:text-white"
                         >
                           <X className="h-3 w-3" aria-hidden="true" />
@@ -469,12 +479,13 @@ export default function DSAWritePage() {
                   <div className="flex flex-wrap gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                     {selectedTerms.map((slug) => {
                       const term = terms.find((item) => item.slug === slug);
+                      const termName = term?.name ?? termNameBySlug[slug] ?? slug;
                       return (
                         <span
                           key={slug}
                           className="inline-flex items-center rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white"
                         >
-                          {term?.name ?? slug}
+                          {termName}
                         </span>
                       );
                     })}
