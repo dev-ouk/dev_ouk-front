@@ -17,6 +17,10 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableHeader from "@tiptap/extension-table-header";
+import TableCell from "@tiptap/extension-table-cell";
 import { Node, mergeAttributes } from "@tiptap/core";
 import { TextSelection, NodeSelection } from "prosemirror-state";
 import { useEffect, useState, useRef } from "react";
@@ -650,6 +654,16 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         lowlight,
         defaultLanguage: null, // 노션처럼 기본은 plain
       }),
+      // ✅ 노션 스타일 Table
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: "dsna-table",
+        },
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
       // ✅ 따로 HorizontalRule 추가 (블록용 클래스를 붙이기 위해)
       HorizontalRule.extend({
         draggable: true, // 드래그도 블록처럼
@@ -663,7 +677,7 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         },
       }),
       Placeholder.configure({
-        placeholder: "마크다운 단축키를 사용하세요: #, ##, ###, -, *, 1., ```",
+        placeholder: "마크다운 단축키를 사용하세요: #, ##, ###, -, *, 1., ```, /table",
       }),
       Link.configure({
         openOnClick: false,
@@ -862,6 +876,18 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
           // 커서 위치까지의 텍스트 (Space 입력 전, 공백 제거)
           const textBeforeCursor = state.doc.textBetween(blockStart, $from.pos, "").trim();
           
+          // Table 단축키: /table + Space (Notion 스타일)
+          if (textBeforeCursor === "/table") {
+            event.preventDefault();
+            ed
+              ?.chain()
+              .focus()
+              .deleteRange({ from: blockStart, to: blockStart + textBeforeCursor.length })
+              .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+              .run();
+            return true;
+          }
+
           // Toggle 단축키: > + Space (Notion Toggle)
           if (textBeforeCursor === ">") {
             event.preventDefault();
@@ -2475,6 +2501,49 @@ export function DsnaEditor({ initialContent, onChange }: DsnaEditorProps) {
         }
         .dsna-editor.ProseMirror a:hover {
           color: #1d4ed8;
+        }
+        /* === Table (Notion-like) === */
+        .dsna-editor.ProseMirror .tableWrapper {
+          overflow-x: auto;
+          margin: 0.5rem 0;
+          /* ✅ 표는 텍스트 시작선에 맞추기 */
+          padding-left: 0;
+          margin-left: 0;
+        }
+        .dsna-editor.ProseMirror table.dsna-table,
+        .dsna-editor.ProseMirror table {
+          border-collapse: collapse;
+          width: 100%;
+          table-layout: fixed;
+          background: #ffffff;
+        }
+        .dsna-editor.ProseMirror table.dsna-table th,
+        .dsna-editor.ProseMirror table.dsna-table td,
+        .dsna-editor.ProseMirror table th,
+        .dsna-editor.ProseMirror table td {
+          border: 1px solid #cbd5e1;
+          padding: 0.4rem 0.5rem;
+          vertical-align: top;
+          min-width: 80px;
+          background: #ffffff;
+        }
+        .dsna-editor.ProseMirror table.dsna-table th,
+        .dsna-editor.ProseMirror table th {
+          background: #e2e8f0;
+          font-weight: 600;
+          color: #1f2937;
+        }
+        .dsna-editor.ProseMirror table.dsna-table td p,
+        .dsna-editor.ProseMirror table.dsna-table th p,
+        .dsna-editor.ProseMirror table td p,
+        .dsna-editor.ProseMirror table th p {
+          margin: 0;
+        }
+        .dsna-editor.ProseMirror .selectedCell::after {
+          background: rgba(59, 130, 246, 0.08);
+        }
+        .dsna-editor.ProseMirror .column-resize-handle {
+          background: rgba(24, 24, 27, 0.2);
         }
         /* === Placeholder === */
         /* ✅ 최상위 블록에서만 placeholder 위치/패딩 적용 */

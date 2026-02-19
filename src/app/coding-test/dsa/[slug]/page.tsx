@@ -9,6 +9,10 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableHeader from "@tiptap/extension-table-header";
+import TableCell from "@tiptap/extension-table-cell";
 import { createLowlight } from "lowlight";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { CodeBlockNodeView } from "../_components/CodeBlockNodeView";
@@ -197,6 +201,15 @@ export default function DSANoteDetailPage() {
         lowlight,
         defaultLanguage: null,
       }),
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: "dsna-table",
+        },
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
       HorizontalRule.extend({
         renderHTML({ HTMLAttributes }) {
           return [
@@ -568,6 +581,48 @@ export default function DSANoteDetailPage() {
         }
         .dsna-editor.ProseMirror a:hover {
           color: #1d4ed8;
+        }
+        /* === Table (Notion-like) === */
+        .dsna-editor.ProseMirror .tableWrapper {
+          overflow-x: auto;
+          margin: 0.5rem 0;
+          padding-left: 0;
+          margin-left: 0;
+        }
+        .dsna-editor.ProseMirror table.dsna-table,
+        .dsna-editor.ProseMirror table {
+          border-collapse: collapse;
+          width: 100%;
+          table-layout: fixed;
+          background: #ffffff;
+        }
+        .dsna-editor.ProseMirror table.dsna-table th,
+        .dsna-editor.ProseMirror table.dsna-table td,
+        .dsna-editor.ProseMirror table th,
+        .dsna-editor.ProseMirror table td {
+          border: 1px solid #cbd5e1;
+          padding: 0.4rem 0.5rem;
+          vertical-align: top;
+          min-width: 80px;
+          background: #ffffff;
+        }
+        .dsna-editor.ProseMirror table.dsna-table th,
+        .dsna-editor.ProseMirror table th {
+          background: #e2e8f0;
+          font-weight: 600;
+          color: #1f2937;
+        }
+        .dsna-editor.ProseMirror table.dsna-table td p,
+        .dsna-editor.ProseMirror table.dsna-table th p,
+        .dsna-editor.ProseMirror table td p,
+        .dsna-editor.ProseMirror table th p {
+          margin: 0;
+        }
+        .dsna-editor.ProseMirror .selectedCell::after {
+          background: rgba(59, 130, 246, 0.08);
+        }
+        .dsna-editor.ProseMirror .column-resize-handle {
+          background: rgba(24, 24, 27, 0.2);
         }
         /* === HR 블록 === */
         .dsna-editor.ProseMirror .dsna-hr-block {
