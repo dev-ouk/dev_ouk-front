@@ -15,7 +15,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import { createLowlight } from "lowlight";
 import { ReactNodeViewRenderer } from "@tiptap/react";
-import { CodeBlockNodeView } from "../_components/CodeBlockNodeView";
+import { ReadOnlyCodeBlockNodeView } from "../_components/ReadOnlyCodeBlockNodeView";
 import { Node, mergeAttributes } from "@tiptap/core";
 import { TextSelection } from "prosemirror-state";
 import "highlight.js/styles/github.css";
@@ -195,7 +195,7 @@ export default function DSANoteDetailPage() {
       ToggleBlock, // Toggle Block 추가
       CodeBlockLowlight.extend({
         addNodeView() {
-          return ReactNodeViewRenderer(CodeBlockNodeView);
+          return ReactNodeViewRenderer(ReadOnlyCodeBlockNodeView);
         },
       }).configure({
         lowlight,
@@ -502,8 +502,8 @@ export default function DSANoteDetailPage() {
         }
         /* === Notion-like CodeBlock === */
         .dsna-codeblock {
-          border: 1px solid #e4e4e7;
-          background: #f7f6f3;
+          border: 1px solid #3f4652;
+          background: #282c34;
           border-radius: 0.75rem;
           overflow: hidden;
           margin: 0.65rem 0;
@@ -514,31 +514,31 @@ export default function DSANoteDetailPage() {
           justify-content: space-between;
           gap: 0.5rem;
           padding: 0.45rem 0.6rem;
-          background: rgba(0,0,0,0.03);
-          border-bottom: 1px solid rgba(0,0,0,0.06);
+          background: #1f2329;
+          border-bottom: 1px solid #3f4652;
         }
-        .dsna-codeblock-select {
+        .dsna-codeblock-lang-label {
           font-size: 12px;
           padding: 0.25rem 0.45rem;
           border-radius: 0.5rem;
-          border: 1px solid rgba(0,0,0,0.10);
-          background: white;
-          color: #27272a;
-          outline: none;
+          border: 1px solid #4b5360;
+          background: #2f3440;
+          color: #e5e7eb;
+          line-height: 1;
         }
         .dsna-codeblock-copy {
           font-size: 12px;
           padding: 0.25rem 0.5rem;
           border-radius: 0.5rem;
-          border: 1px solid transparent;
-          color: #52525b;
-          background: transparent;
+          border: 1px solid #4b5360;
+          color: #d1d5db;
+          background: #2f3440;
           cursor: pointer;
         }
         .dsna-codeblock-copy:hover {
-          background: rgba(0,0,0,0.06);
-          border-color: rgba(0,0,0,0.06);
-          color: #27272a;
+          background: #3a404d;
+          border-color: #5a6473;
+          color: #ffffff;
         }
         .dsna-codeblock-pre {
           margin: 0;
@@ -550,6 +550,7 @@ export default function DSANoteDetailPage() {
           font-size: 13px;
           line-height: 1.65;
           white-space: pre;
+          color: #e6edf3;
         }
         .dsna-editor.ProseMirror pre:not(.dsna-codeblock-pre) {
           background-color: #f4f4f5;
